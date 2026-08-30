@@ -40,6 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# the template is safe to share; real values live in .env.local
+!.env.example
+
 # study tracker
 /data
 .env.local
