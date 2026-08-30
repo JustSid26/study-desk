@@ -8,6 +8,7 @@
  * trip. Everything that changes data still goes through a Server Action.
  */
 import * as React from "react";
+import Link from "next/link";
 
 import {
   Button,
@@ -21,8 +22,8 @@ import {
 } from "@/components/ui";
 import { formatDay, formatMins } from "@/lib/dates";
 import { deleteProblem } from "@/app/actions/problems";
-import { LogProblemButton } from "@/components/log-dialogs";
 import { DifficultyChip, type ProblemItem } from "./bits";
+import { LogProblemButton } from "./log-problem";
 
 const DIFFICULTIES = ["Easy", "Medium", "Hard"] as const;
 
@@ -94,7 +95,7 @@ export function ProblemsTable({ problems }: { problems: ProblemItem[] }) {
         title="No problems logged yet"
         action={
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <LogProblemButton />
+            <LogProblemButton emphasis />
             <LinkButton href="/setup">Import from LeetCode</LinkButton>
           </div>
         }
@@ -195,18 +196,28 @@ export function ProblemsTable({ problems }: { problems: ProblemItem[] }) {
                     {p.number ?? "—"}
                   </td>
                   <td className="max-w-[260px] py-2.5 pr-3">
-                    {p.url ? (
-                      <a
-                        href={p.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium text-ink underline decoration-line underline-offset-2 hover:decoration-accent"
+                    {/* The title opens the problem inside the app; leetcode.com
+                        stays reachable, just no longer the default. */}
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <Link
+                        href={`/leetcode/${p.slug}`}
+                        className="min-w-0 truncate font-medium text-ink underline decoration-line underline-offset-2 hover:decoration-accent"
                       >
                         {p.title}
-                      </a>
-                    ) : (
-                      <span className="font-medium text-ink">{p.title}</span>
-                    )}
+                      </Link>
+                      {p.url ? (
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open on leetcode.com"
+                          aria-label={`Open ${p.title} on leetcode.com`}
+                          className="shrink-0 font-mono text-[10px] uppercase tracking-[0.13em] text-ink-3 underline underline-offset-2 hover:text-ink"
+                        >
+                          LC
+                        </a>
+                      ) : null}
+                    </span>
                   </td>
                   <td className="py-2.5 pr-3">
                     <DifficultyChip difficulty={p.difficulty} />

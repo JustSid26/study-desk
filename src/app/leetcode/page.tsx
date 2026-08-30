@@ -15,13 +15,14 @@ import {
   LinkButton,
   PageHeader,
   StatTile,
+  linkButtonClass,
 } from "@/components/ui";
-import { LogProblemButton } from "@/components/log-dialogs";
 import { getDashboard, getProblems, getTagCounts } from "@/lib/queries";
 import { addDays, currentStreak, dayRange, relativeTime } from "@/lib/dates";
 import type { Difficulty } from "@/db/schema";
 
 import { DIFFICULTY_COLOR, DifficultyChip, type ProblemItem } from "./bits";
+import { LogProblemButton } from "./log-problem";
 import { ProblemsTable } from "./problems-table";
 import { ReviewedButton } from "./reviewed-button";
 
@@ -214,16 +215,26 @@ export default async function LeetCodePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <ReviewedButton id={problem.id} title={problem.title} />
+                  {/* Open means open here, with the editor. The round trip to
+                      leetcode.com is still one click away, just secondary. */}
+                  <Link
+                    href={`/leetcode/${problem.slug}`}
+                    className={linkButtonClass({ size: "sm" })}
+                    aria-label={`Open ${problem.title} in the app`}
+                  >
+                    Open
+                  </Link>
                   {problem.url ? (
-                    <LinkButton
-                      size="sm"
+                    <a
                       href={problem.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label={`Open ${problem.title} on LeetCode`}
+                      title="Open on leetcode.com"
+                      aria-label={`Open ${problem.title} on leetcode.com`}
+                      className="font-mono text-[10px] uppercase tracking-[0.13em] text-ink-3 underline underline-offset-2 hover:text-ink"
                     >
-                      Open
-                    </LinkButton>
+                      LC
+                    </a>
                   ) : null}
                 </div>
               </li>
