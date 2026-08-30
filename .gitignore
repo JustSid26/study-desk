@@ -51,3 +51,8 @@ next-env.d.ts
 # next dev writes these
 CLAUDE.md
 AGENTS.md
+
+# practice scratch files and the notes vault
+/practicecode/**
+!/practicecode/README.md
+/data

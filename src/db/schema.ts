@@ -21,114 +21,6 @@ import {
 
 const now = sql`(unixepoch() * 1000)`;
 
-/* ------------------------------- subjects -------------------------------- */
-
-export const subjects = sqliteTable("subjects", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  color: text("color").notNull().default("#275C4B"),
-  /** optional weekly study target, in minutes */
-  goalMins: integer("goal_mins"),
-  position: integer("position").notNull().default(0),
-  createdAt: integer("created_at").notNull().default(now),
-});
-
-/** Mastery ladder for a topic. Ordered — `masteryWeight` depends on this order. */
-export const TOPIC_STATUS = ["new", "learning", "revising", "solid"] as const;
-export type TopicStatus = (typeof TOPIC_STATUS)[number];
-
-export const topics = sqliteTable(
-  "topics",
-  {
-    id: text("id").primaryKey(),
-    subjectId: text("subject_id")
-      .notNull()
-      .references(() => subjects.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    status: text("status").$type<TopicStatus>().notNull().default("new"),
-    position: integer("position").notNull().default(0),
-    updatedAt: integer("updated_at").notNull().default(now),
-  },
-  (t) => [index("topics_subject_idx").on(t.subjectId)],
-);
-
-/* --------------------------------- files --------------------------------- */
-
-/**
- * Uploaded originals. The bytes live on disk under data/uploads/<id><ext>;
- * only metadata is in the database, so the DB stays small and a photo of a
- * whiteboard is still served as a plain static-ish file by /api/files/[id].
- */
-export const files = sqliteTable("files", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  mime: text("mime").notNull(),
-  size: integer("size").notNull(),
-  /** path relative to the uploads dir — never an absolute path, so the data
-   *  directory can be moved or backed up wholesale */
-  path: text("path").notNull(),
-  sha256: text("sha256"),
-  createdAt: integer("created_at").notNull().default(now),
-});
-
-/* --------------------------------- notes --------------------------------- */
-
-export const NOTE_KIND = ["text", "image", "pdf", "docx", "doc", "file"] as const;
-export type NoteKind = (typeof NOTE_KIND)[number];
-
-export const notes = sqliteTable(
-  "notes",
-  {
-    id: text("id").primaryKey(),
-    subjectId: text("subject_id").references(() => subjects.id, {
-      onDelete: "set null",
-    }),
-    title: text("title").notNull().default(""),
-    /** Markdown. On a file note this is your own commentary on the file. */
-    body: text("body").notNull().default(""),
-    kind: text("kind").$type<NoteKind>().notNull().default("text"),
-    fileId: text("file_id").references(() => files.id, { onDelete: "set null" }),
-    createdAt: integer("created_at").notNull().default(now),
-    updatedAt: integer("updated_at").notNull().default(now),
-  },
-  (t) => [
-    index("notes_subject_idx").on(t.subjectId),
-    index("notes_updated_idx").on(t.updatedAt),
-  ],
-);
-
-export const noteTags = sqliteTable(
-  "note_tags",
-  {
-    noteId: text("note_id")
-      .notNull()
-      .references(() => notes.id, { onDelete: "cascade" }),
-    tag: text("tag").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.noteId, t.tag] }),
-    index("note_tags_tag_idx").on(t.tag),
-  ],
-);
-
-/* ------------------------------- sessions -------------------------------- */
-
-export const sessions = sqliteTable(
-  "sessions",
-  {
-    id: text("id").primaryKey(),
-    subjectId: text("subject_id").references(() => subjects.id, {
-      onDelete: "cascade",
-    }),
-    minutes: integer("minutes").notNull(),
-    /** YYYY-MM-DD, local */
-    day: text("day").notNull(),
-    note: text("note").notNull().default(""),
-    createdAt: integer("created_at").notNull().default(now),
-  },
-  (t) => [index("sessions_day_idx").on(t.day)],
-);
-
 /* ------------------------------ leetcode --------------------------------- */
 
 export const DIFFICULTY = ["Easy", "Medium", "Hard"] as const;
@@ -224,7 +116,6 @@ export const problemTags = sqliteTable(
 export const settings = sqliteTable("settings", {
   id: text("id").primaryKey().default("singleton"),
 
-  dailyMins: integer("daily_mins").notNull().default(90),
   dailyProblems: integer("daily_problems").notNull().default(2),
   goalEasy: integer("goal_easy").notNull().default(150),
   goalMedium: integer("goal_medium").notNull().default(250),
@@ -251,30 +142,6 @@ export const settings = sqliteTable("settings", {
 
 /* ------------------------------- relations ------------------------------- */
 
-export const subjectsRelations = relations(subjects, ({ many }) => ({
-  topics: many(topics),
-  notes: many(notes),
-  sessions: many(sessions),
-}));
-
-export const topicsRelations = relations(topics, ({ one }) => ({
-  subject: one(subjects, { fields: [topics.subjectId], references: [subjects.id] }),
-}));
-
-export const notesRelations = relations(notes, ({ one, many }) => ({
-  subject: one(subjects, { fields: [notes.subjectId], references: [subjects.id] }),
-  file: one(files, { fields: [notes.fileId], references: [files.id] }),
-  tags: many(noteTags),
-}));
-
-export const noteTagsRelations = relations(noteTags, ({ one }) => ({
-  note: one(notes, { fields: [noteTags.noteId], references: [notes.id] }),
-}));
-
-export const sessionsRelations = relations(sessions, ({ one }) => ({
-  subject: one(subjects, { fields: [sessions.subjectId], references: [subjects.id] }),
-}));
-
 export const problemsRelations = relations(problems, ({ many }) => ({
   tags: many(problemTags),
 }));
@@ -283,13 +150,116 @@ export const problemTagsRelations = relations(problemTags, ({ one }) => ({
   problem: one(problems, { fields: [problemTags.problemId], references: [problems.id] }),
 }));
 
+
+/* ------------------------------- timetable ------------------------------- */
+
+export const WEEKDAYS = [
+  "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
+/**
+ * Your weekly timetable. Times are "HH:MM" on a 24-hour clock and stored as
+ * strings rather than minutes-since-midnight, so what you typed is what comes
+ * back and the rows sort correctly with a plain string comparison.
+ *
+ * `subjectPath` optionally points at a folder in the notes vault, which is what
+ * lets a timetable entry link straight to that subject's notes.
+ */
+export const timetable = sqliteTable(
+  "timetable",
+  {
+    id: text("id").primaryKey(),
+    /** 0 = Monday … 6 = Sunday */
+    weekday: integer("weekday").notNull(),
+    startsAt: text("starts_at").notNull(),
+    endsAt: text("ends_at").notNull(),
+    title: text("title").notNull(),
+    /** relative path of a folder in the vault, e.g. "Operating Systems" */
+    subjectPath: text("subject_path"),
+    location: text("location"),
+    note: text("note").notNull().default(""),
+    createdAt: integer("created_at").notNull().default(now),
+  },
+  (t) => [index("timetable_day_idx").on(t.weekday, t.startsAt)],
+);
+
+/* --------------------------- question cache ------------------------------ */
+
+/**
+ * A problem's description, fetched from LeetCode and kept so the in-app problem
+ * screen opens instantly and still works offline. The HTML is stored raw and
+ * sanitised at render time — sanitising on the way in would bake today's
+ * allowlist into the cache.
+ */
+export const questionCache = sqliteTable("question_cache", {
+  slug: text("slug").primaryKey(),
+  questionId: text("question_id").notNull(),
+  number: integer("number").notNull(),
+  title: text("title").notNull(),
+  difficulty: text("difficulty").$type<Difficulty>().notNull(),
+  /** raw HTML from LeetCode */
+  content: text("content").notNull().default(""),
+  /** JSON array of hint strings */
+  hints: text("hints").notNull().default("[]"),
+  /** JSON: { langSlug: starterCode } */
+  snippets: text("snippets").notNull().default("{}"),
+  sampleTestCase: text("sample_test_case").notNull().default(""),
+  exampleTestcases: text("example_testcases").notNull().default(""),
+  acRate: real("ac_rate"),
+  fetchedAt: integer("fetched_at").notNull().default(now),
+});
+
+/* ------------------------------ solutions -------------------------------- */
+
+/**
+ * Your working draft per problem, so switching away from the editor and coming
+ * back does not lose the attempt. One row per problem and language.
+ */
+export const drafts = sqliteTable(
+  "drafts",
+  {
+    slug: text("slug").notNull(),
+    lang: text("lang").notNull(),
+    code: text("code").notNull().default(""),
+    updatedAt: integer("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.slug, t.lang] })],
+);
+
+export const SUBMISSION_VERDICT = [
+  "Accepted", "Wrong Answer", "Time Limit Exceeded", "Memory Limit Exceeded",
+  "Runtime Error", "Compile Error", "Output Limit Exceeded", "Unknown",
+] as const;
+
+/** A log of what was actually sent to LeetCode, and what came back. */
+export const submissions = sqliteTable(
+  "submissions",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug").notNull(),
+    lang: text("lang").notNull(),
+    code: text("code").notNull(),
+    verdict: text("verdict").notNull().default("Unknown"),
+    /** LeetCode's own submission id, when it gave us one */
+    remoteId: text("remote_id"),
+    runtime: text("runtime"),
+    memory: text("memory"),
+    totalCorrect: integer("total_correct"),
+    totalTestcases: integer("total_testcases"),
+    errorText: text("error_text"),
+    day: text("day").notNull(),
+    createdAt: integer("created_at").notNull().default(now),
+  },
+  (t) => [index("submissions_slug_idx").on(t.slug), index("submissions_day_idx").on(t.day)],
+);
+
 /* --------------------------- inferred row types --------------------------- */
 
-export type Subject = typeof subjects.$inferSelect;
-export type Topic = typeof topics.$inferSelect;
-export type NoteRow = typeof notes.$inferSelect;
-export type FileRow = typeof files.$inferSelect;
-export type SessionRow = typeof sessions.$inferSelect;
 export type ProblemRow = typeof problems.$inferSelect;
 export type CatalogueRow = typeof catalogue.$inferSelect;
 export type SettingsRow = typeof settings.$inferSelect;
+export type TimetableRow = typeof timetable.$inferSelect;
+export type QuestionCacheRow = typeof questionCache.$inferSelect;
+export type SubmissionRow = typeof submissions.$inferSelect;
+export type DraftRow = typeof drafts.$inferSelect;
