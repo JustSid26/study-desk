@@ -11,18 +11,25 @@ npm run dev          # http://localhost:3311
 
 ## What it does
 
-**Notes** — type them in Markdown, or upload photos, PDFs, docx and text files. Drop
-files anywhere on the page, or paste a screenshot straight in. Images and PDFs preview
-inline; docx is converted server-side. A file note keeps its own body as annotations, so
-a photo of handwritten notes can carry typed commentary next to it.
+**Subjects** — a subject is a real folder under `data/subjects/`, with folders inside it
+for units or chapters, nested as deep as you like. Notes are real files: Markdown you type
+in the app, or PDFs, images and docx you upload, drop or paste. Because the filesystem is
+the source of truth, a file you drop into a folder from Finder appears in the app, and a
+backup is a copy of one directory.
 
-**Subjects** — a subject holds topics, and each topic carries a mastery level that cycles
-from not started, through learning and revising, to solid. Paste a whole syllabus in when
-creating a subject. Study sessions are logged against a subject and feed the heatmap.
+**LeetCode** — the problem statement, examples and hints open inside the app. Write a
+solution, run it against the sample tests, and submit it to LeetCode without leaving.
+An accepted submission logs itself locally with its difficulty, topics and language.
+Progress bars against your own targets, a topic breakdown, and a revisit queue that
+surfaces problems you flagged plus anything untouched past the staleness threshold.
 
-**LeetCode** — progress against your own targets by difficulty, a breakdown by topic, and
-a revisit queue that surfaces problems you flagged plus anything you haven't touched past
-the staleness threshold.
+**Practice** — a scratchpad for Java and Python that runs on a button instead of a
+terminal. Files live in `practicecode/java` and `practicecode/python` as real files.
+Compiler and runtime errors come back as a line number, the message, and a sentence
+explaining what it usually means; the line number jumps the caret there.
+
+**Timetable** — a weekly grid where a class block's height is its real duration. A class
+can point at a subject folder, so it links straight to that subject's notes.
 
 ## Importing from LeetCode
 
@@ -69,7 +76,7 @@ dates. Everything logged afterwards is dated properly.
 
 ## Your data
 
-Everything lives in `data/` — `study.db` and `uploads/`. Back up that one folder. It is
+Everything lives in `data/` — `study.db` and `subjects/`. Back up that one folder. It is
 not synced; point `STUDY_DATA_DIR` at a synced directory to change that:
 
 ```
@@ -84,14 +91,21 @@ code changes.
 ```
 src/
   db/          schema and connection
-  lib/         leetcode client, sync engine, queries, date helpers
+  lib/         leetcode client, sync engine, vault (the notes filesystem),
+               runner (Java/Python execution), queries, date helpers
   app/
     actions/   server actions (mutations)
-    api/       file serving, docx conversion, sync, problem lookup
+    api/       vault file serving, docx conversion, code run/submit, sync
     ...        one directory per route
   components/  shared UI
 drizzle/       generated migrations
+data/subjects/ your notes, as folders and files
+practicecode/  your Java and Python scratch files
 ```
+
+Running code spawns real processes, so the runner caps output, times a run out after 15
+seconds, and kills the whole process group — `javac` and `java` spawn children that
+outlive the parent.
 
 Days are stored as local `YYYY-MM-DD` strings rather than timestamps, and every day-walk
 uses calendar arithmetic — adding 86,400,000 ms repeats a day at the autumn clock change
