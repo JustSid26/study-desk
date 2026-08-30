@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { LeetCodeError, envCredentials, type Credentials } from "@/lib/leetcode";
+import { rejectCrossOrigin } from "@/lib/same-origin";
 import {
   enrichFromCatalogue,
   getSettings,
@@ -29,6 +30,9 @@ const Body = z.object({
 });
 
 export async function POST(request: Request) {
+  const blocked = rejectCrossOrigin(request);
+  if (blocked) return blocked;
+
   let raw: unknown;
   try {
     raw = await request.json();

@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  experimental: {
+    // Uploads into the notes vault go through a Server Action, and an action
+    // request is capped at 1 MB by default — which every scanned PDF exceeds.
+    // The vault's own per-file cap is 60 MB; this leaves room for one of those
+    // plus the multipart boundaries and part headers wrapped around it.
+    serverActions: { bodySizeLimit: "64mb" },
+  },
 };
 
 export default nextConfig;

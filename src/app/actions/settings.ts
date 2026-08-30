@@ -1,23 +1,18 @@
 "use server";
 
-import fs from "node:fs";
-import path from "node:path";
-
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { db } from "@/db";
 import {
-  subjects,
-  topics,
-  notes,
-  noteTags,
-  files,
-  sessions,
   problems,
   problemTags,
   catalogue,
   settings,
+  timetable,
+  drafts,
+  submissions,
+  questionCache,
 } from "@/db/schema";
 import {
   getSettings,
@@ -27,7 +22,7 @@ import {
   enrichFromCatalogue,
 } from "@/lib/sync";
 import { envCredentials, LeetCodeError, type Credentials } from "@/lib/leetcode";
-import { UPLOADS_DIR, ensureDataDirs } from "@/lib/paths";
+import { deleteEntry, listSubjects, recentFiles } from "@/lib/vault";
 
 type Ok<T> = { ok: true } & T;
 type Fail = { ok: false; error: string };
@@ -44,8 +39,9 @@ function str(fd: FormData, key: string): string {
 function touchAll() {
   revalidatePath("/");
   revalidatePath("/subjects");
-  revalidatePath("/notes");
   revalidatePath("/leetcode");
+  revalidatePath("/practice");
+  revalidatePath("/timetable");
   revalidatePath("/setup");
 }
 
@@ -54,7 +50,6 @@ function touchAll() {
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.trunc(n)));
 
 const goalsSchema = z.object({
-  dailyMins: z.number().finite("Give a daily minutes target."),
   dailyProblems: z.number().finite("Give a daily problems target."),
   goalEasy: z.number().finite("Give an Easy target."),
   goalMedium: z.number().finite("Give a Medium target."),
@@ -71,7 +66,6 @@ function num(fd: FormData, key: string, fallback: number): number {
 
 export async function updateGoals(fd: FormData): Promise<
   | Ok<{
-      dailyMins: number;
       dailyProblems: number;
       goalEasy: number;
       goalMedium: number;
@@ -84,7 +78,6 @@ export async function updateGoals(fd: FormData): Promise<
     const current = await getSettings();
 
     const parsed = goalsSchema.safeParse({
-      dailyMins: num(fd, "dailyMins", current.dailyMins),
       dailyProblems: num(fd, "dailyProblems", current.dailyProblems),
       goalEasy: num(fd, "goalEasy", current.goalEasy),
       goalMedium: num(fd, "goalMedium", current.goalMedium),
@@ -94,7 +87,6 @@ export async function updateGoals(fd: FormData): Promise<
     if (!parsed.success) return fail("Every target has to be a number.");
 
     const next = {
-      dailyMins: clamp(parsed.data.dailyMins, 5, 1440),
       dailyProblems: clamp(parsed.data.dailyProblems, 0, 50),
       goalEasy: clamp(parsed.data.goalEasy, 0, 5000),
       goalMedium: clamp(parsed.data.goalMedium, 0, 5000),
@@ -237,8 +229,8 @@ export async function refreshCatalogue(): Promise<Ok<{ count: number }> | Fail> 
 /* --------------------------------- danger --------------------------------- */
 
 /**
- * Wipes every table and the uploads folder. The literal word "erase" has to be
- * typed — a click alone can't do this.
+ * Wipes every table and the whole notes vault. The literal word "erase" has to
+ * be typed — a click alone can't do this.
  */
 export async function clearEverything(
   confirmation: string,
@@ -249,32 +241,28 @@ export async function clearEverything(
 
   try {
     // Children before parents, so a foreign key never blocks the wipe.
-    await db.delete(noteTags);
     await db.delete(problemTags);
-    await db.delete(notes);
-    await db.delete(files);
-    await db.delete(topics);
-    await db.delete(sessions);
     await db.delete(problems);
+    await db.delete(submissions);
+    await db.delete(drafts);
+    await db.delete(questionCache);
+    await db.delete(timetable);
     await db.delete(catalogue);
-    await db.delete(subjects);
     await db.delete(settings);
 
+    // The vault is the notes: emptying it means removing every subject folder.
     let filesRemoved = 0;
     try {
-      ensureDataDirs();
-      const entries = await fs.promises.readdir(UPLOADS_DIR, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isFile()) continue;
+      filesRemoved = (await recentFiles(100_000)).length;
+      for (const entry of await listSubjects()) {
         try {
-          await fs.promises.unlink(path.join(UPLOADS_DIR, entry.name));
-          filesRemoved++;
+          await deleteEntry(entry.rel);
         } catch {
-          /* a file already gone is a file already deleted */
+          /* a folder already gone is a folder already deleted */
         }
       }
     } catch {
-      /* no uploads directory means nothing to remove */
+      /* an unreadable vault means there is nothing here to remove */
     }
 
     await getSettings(); // rebuild the singleton with defaults
@@ -287,7 +275,8 @@ export async function clearEverything(
 
 /* --------------------------------- export --------------------------------- */
 
-/** The whole database as plain JSON. Metadata only — no uploaded bytes. */
+/** The whole database as plain JSON. Metadata only — the vault is a folder you
+ *  back up by copying it, and the question cache is re-fetchable. */
 export async function exportJson(): Promise<
   | Ok<{
       exportedAt: number;
@@ -298,26 +287,20 @@ export async function exportJson(): Promise<
 > {
   try {
     const [
-      subjectRows,
-      topicRows,
-      noteRows,
-      noteTagRows,
-      fileRows,
-      sessionRows,
       problemRows,
       problemTagRows,
       catalogueRows,
+      timetableRows,
+      draftRows,
+      submissionRows,
       settingsRows,
     ] = await Promise.all([
-      db.select().from(subjects),
-      db.select().from(topics),
-      db.select().from(notes),
-      db.select().from(noteTags),
-      db.select().from(files),
-      db.select().from(sessions),
       db.select().from(problems),
       db.select().from(problemTags),
       db.select().from(catalogue),
+      db.select().from(timetable),
+      db.select().from(drafts),
+      db.select().from(submissions),
       db.select().from(settings),
     ]);
 
@@ -326,15 +309,12 @@ export async function exportJson(): Promise<
       exportedAt: Date.now(),
       version: 1,
       data: {
-        subjects: subjectRows,
-        topics: topicRows,
-        notes: noteRows,
-        noteTags: noteTagRows,
-        files: fileRows,
-        sessions: sessionRows,
         problems: problemRows,
         problemTags: problemTagRows,
         catalogue: catalogueRows,
+        timetable: timetableRows,
+        drafts: draftRows,
+        submissions: submissionRows,
         settings: settingsRows,
       },
     };

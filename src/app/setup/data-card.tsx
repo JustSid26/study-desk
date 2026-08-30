@@ -4,7 +4,7 @@
  * Your data — where it lives, how to get a copy out, and how to destroy it.
  *
  * The wipe is behind a real <dialog> that only enables its destructive button
- * once the word "erase" has been typed. No window.confirm anywhere: it can't be
+ * once the word "erase" has been typed. Never a native browser prompt: it can't be
  * styled, it can't be read by a screen reader properly, and it makes a
  * catastrophic action one keypress away.
  */
@@ -104,9 +104,9 @@ export function DataCard() {
             <code className="rounded bg-surface-2 px-1 py-px font-mono text-[11.5px] text-ink">
               data/study.db
             </code>
-            , with uploaded originals beside it under{" "}
+            , with your notes beside it as real files under{" "}
             <code className="rounded bg-surface-2 px-1 py-px font-mono text-[11.5px] text-ink">
-              data/uploads/
+              data/subjects/
             </code>
             . Both sit on this machine. Nothing is synced anywhere, there is no account, and no
             server of ours ever sees a note.
@@ -130,16 +130,16 @@ export function DataCard() {
           </Button>
         </div>
         <p className="-mt-2 text-[11.5px] leading-snug text-ink-3">
-          The export is every row of the database as plain JSON — subjects, topics, notes, sessions,
-          problems and settings. It lists uploaded files but does not contain their bytes; those are
-          already sitting in{" "}
-          <code className="font-mono text-[11px]">data/uploads/</code>.
+          The export is every row of the database as plain JSON — problems, tags, the LeetCode
+          catalogue, your timetable, drafts, submissions and settings. Your notes are not in it:
+          they are files, and you back them up by copying{" "}
+          <code className="font-mono text-[11px]">data/subjects/</code>.
         </p>
 
         <div aria-live="polite">
           {note ? <p className="text-[12.5px] leading-snug text-ink-2">{note}</p> : null}
           {error ? (
-            <p className="text-[12.5px] leading-snug" style={{ color: "var(--color-flame)" }}>
+            <p role="alert" className="text-[12.5px] leading-snug">
               {error}
             </p>
           ) : null}
@@ -160,11 +160,11 @@ export function DataCard() {
 
         <div className="flex flex-col gap-3 px-4 py-4">
           <p className="text-[13px] leading-relaxed text-ink-2">
-            This deletes every subject, topic, note, session, problem and setting, empties{" "}
+            This deletes every problem, timetable entry, draft, submission and setting, empties{" "}
             <code className="rounded bg-surface-2 px-1 py-px font-mono text-[11.5px] text-ink">
-              data/uploads/
-            </code>
-            , and drops the cached problem catalogue. It cannot be undone. Export first if you might
+              data/subjects/
+            </code>{" "}
+            of every subject folder and note in it, and drops the cached problem catalogue. It cannot be undone. Export first if you might
             want any of it back.
           </p>
 
@@ -181,7 +181,7 @@ export function DataCard() {
           </label>
 
           {error ? (
-            <p className="text-[12.5px] leading-snug" style={{ color: "var(--color-flame)" }}>
+            <p role="alert" className="text-[12.5px] leading-snug">
               {error}
             </p>
           ) : null}

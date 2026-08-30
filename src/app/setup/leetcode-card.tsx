@@ -236,10 +236,8 @@ export function LeetCodeCard({
           ) : null}
 
           {syncError ? (
-            <div className="rounded-[9px] border border-line bg-flame-soft px-3 py-2.5">
-              <p className="lbl" style={{ color: "var(--color-flame)" }}>
-                Sync failed
-              </p>
+            <div role="alert" className="rounded-[9px] border border-line bg-flame-soft px-3 py-2.5">
+              <p className="lbl text-ink">Sync failed</p>
               <p className="mt-1 text-[13px] leading-snug text-ink">{syncError}</p>
             </div>
           ) : null}
@@ -277,10 +275,8 @@ export function LeetCodeCard({
         </div>
 
         {lastError && !result && !syncError ? (
-          <div className="rounded-[9px] border border-line bg-flame-soft px-3 py-2.5">
-            <p className="lbl" style={{ color: "var(--color-flame)" }}>
-              Last sync failed
-            </p>
+          <div role="alert" className="rounded-[9px] border border-line bg-flame-soft px-3 py-2.5">
+            <p className="lbl text-ink">Last sync failed</p>
             <p className="mt-1 text-[13px] leading-snug text-ink">{lastError}</p>
           </div>
         ) : null}
@@ -417,7 +413,7 @@ LEETCODE_CSRF=<the csrftoken value>`}
               <p className="mt-2 text-[12px] leading-snug text-ink-2">{catNote}</p>
             ) : null}
             {catError ? (
-              <p className="mt-2 text-[12px] leading-snug" style={{ color: "var(--color-flame)" }}>
+              <p role="alert" className="mt-2 text-[12px] leading-snug">
                 {catError}
               </p>
             ) : null}

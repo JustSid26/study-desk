@@ -1,14 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, like, or, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/db";
 import {
   problems,
   problemTags,
-  catalogue,
   DIFFICULTY,
   PROBLEM_STATUS,
   type Difficulty,
@@ -260,74 +259,5 @@ export async function markReviewed(
     return { ok: true, solvedDay: day, attempts };
   } catch {
     return fail("Couldn't mark that reviewed. Try again.");
-  }
-}
-
-/* -------------------------------- lookup ---------------------------------- */
-
-interface CatalogueHit {
-  slug: string;
-  number: number;
-  title: string;
-  difficulty: Difficulty;
-  topicTags: string[];
-}
-
-/**
- * Local catalogue search: type "3sum" and get the number, difficulty and tags
- * back so logging a solve is one field, not six.
- */
-export async function lookupProblem(query: string): Promise<CatalogueHit[]> {
-  const q = (query ?? "").trim();
-  if (q.length < 1) return [];
-
-  const asNumber = /^\d+$/.test(q) ? Number(q) : null;
-  const slug = q.toLowerCase().replace(/\s+/g, "-");
-
-  try {
-    const rows = await db
-      .select({
-        slug: catalogue.slug,
-        number: catalogue.number,
-        title: catalogue.title,
-        difficulty: catalogue.difficulty,
-        topicTags: catalogue.topicTags,
-      })
-      .from(catalogue)
-      .where(
-        or(
-          asNumber !== null ? eq(catalogue.number, asNumber) : undefined,
-          eq(catalogue.slug, slug),
-          like(catalogue.title, `%${q}%`),
-          like(catalogue.slug, `%${slug}%`),
-        ),
-      )
-      // exact hits first, then shorter titles (a search for "sum" should surface
-      // "Two Sum" before "Sum of Nodes with Even-Valued Grandparent")
-      .orderBy(
-        sql`case when ${catalogue.slug} = ${slug} then 0 when lower(${catalogue.title}) = lower(${q}) then 0 else 1 end`,
-        sql`length(${catalogue.title})`,
-        catalogue.number,
-      )
-      .limit(8);
-
-    return rows.map((r) => ({
-      slug: r.slug,
-      number: r.number,
-      title: r.title,
-      difficulty: r.difficulty,
-      topicTags: parseTags(r.topicTags),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function parseTags(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === "string") : [];
-  } catch {
-    return [];
   }
 }

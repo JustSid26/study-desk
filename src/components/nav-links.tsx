@@ -31,16 +31,6 @@ function IconDashboard(p: IconProps) {
   );
 }
 
-function IconNotes(p: IconProps) {
-  return (
-    <svg {...S} {...p} aria-hidden="true">
-      <path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
-      <path d="M14 3v5h5" />
-      <path d="M9 13h6M9 17h4" />
-    </svg>
-  );
-}
-
 function IconCode(p: IconProps) {
   return (
     <svg {...S} {...p} aria-hidden="true">
@@ -60,6 +50,26 @@ function IconSubjects(p: IconProps) {
   );
 }
 
+function IconPractice(p: IconProps) {
+  return (
+    <svg {...S} {...p} aria-hidden="true">
+      <path d="M5 4.5 10 12l-5 7.5" />
+      <path d="M12.5 19.5H20" />
+    </svg>
+  );
+}
+
+function IconTimetable(p: IconProps) {
+  return (
+    <svg {...S} {...p} aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M8 3v4M16 3v4" />
+      <path d="M8 14h3M8 17.5h6" />
+    </svg>
+  );
+}
+
 function IconSetup(p: IconProps) {
   return (
     <svg {...S} {...p} aria-hidden="true">
@@ -71,9 +81,10 @@ function IconSetup(p: IconProps) {
 
 const LINKS = [
   { href: "/", label: "Dashboard", Icon: IconDashboard },
-  { href: "/notes", label: "Notes", Icon: IconNotes },
-  { href: "/leetcode", label: "LeetCode", Icon: IconCode },
   { href: "/subjects", label: "Subjects", Icon: IconSubjects },
+  { href: "/leetcode", label: "LeetCode", Icon: IconCode },
+  { href: "/practice", label: "Practice", Icon: IconPractice },
+  { href: "/timetable", label: "Timetable", Icon: IconTimetable },
   { href: "/setup", label: "Setup", Icon: IconSetup },
 ] as const;
 
@@ -90,16 +101,16 @@ export function NavLinks({ variant = "rail" }: { variant?: "rail" | "bar" }) {
         {LINKS.map(({ href, label, Icon }) => {
           const active = isActive(pathname, href);
           return (
-            <li key={href} className="flex-1">
+            <li key={href} className="min-w-0 flex-1">
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-col items-center gap-1 py-2 text-[10.5px] font-medium transition-colors ${
+                className={`flex flex-col items-center gap-1 px-0.5 py-2 text-[10px] font-medium transition-colors ${
                   active ? "text-accent" : "text-ink-3 hover:text-ink"
                 }`}
               >
                 <Icon />
-                <span>{label}</span>
+                <span className="w-full truncate text-center">{label}</span>
               </Link>
             </li>
           );

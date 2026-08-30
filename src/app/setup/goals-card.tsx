@@ -14,7 +14,6 @@ import { Button, Card, CardBody, CardHeader, Field, Input } from "@/components/u
 import { updateGoals } from "@/app/actions/settings";
 
 export interface GoalValues {
-  dailyMins: number;
   dailyProblems: number;
   goalEasy: number;
   goalMedium: number;
@@ -33,17 +32,9 @@ const FIELDS: Array<{
   suffix: string;
 }> = [
   {
-    key: "dailyMins",
-    label: "Minutes a day",
-    hint: "The target a day is shaded against in the activity heatmap.",
-    min: 5,
-    max: 1440,
-    suffix: "minutes",
-  },
-  {
     key: "dailyProblems",
     label: "Problems a day",
-    hint: "What the dashboard status line counts today against.",
+    hint: "What the dashboard counts today against, and what the heatmap shades a day by.",
     min: 0,
     max: 50,
     suffix: "problems",
@@ -84,7 +75,6 @@ const FIELDS: Array<{
 
 export function GoalsCard({ initial }: { initial: GoalValues }) {
   const [values, setValues] = React.useState<Record<GoalKey, string>>({
-    dailyMins: String(initial.dailyMins),
     dailyProblems: String(initial.dailyProblems),
     goalEasy: String(initial.goalEasy),
     goalMedium: String(initial.goalMedium),
@@ -107,7 +97,6 @@ export function GoalsCard({ initial }: { initial: GoalValues }) {
         // The action clamps; reflect what was actually stored, but only for
         // fields the person is not currently typing in.
         const stored: Record<GoalKey, string> = {
-          dailyMins: String(res.dailyMins),
           dailyProblems: String(res.dailyProblems),
           goalEasy: String(res.goalEasy),
           goalMedium: String(res.goalMedium),
@@ -187,11 +176,7 @@ export function GoalsCard({ initial }: { initial: GoalValues }) {
         </div>
 
         {error ? (
-          <p
-            className="mt-3 text-[12.5px] leading-snug"
-            style={{ color: "var(--color-flame)" }}
-            aria-live="polite"
-          >
+          <p role="alert" className="mt-3 text-[12.5px] leading-snug">
             {error}{" "}
             <Button size="sm" variant="ghost" onClick={() => void save(values)}>
               Try again

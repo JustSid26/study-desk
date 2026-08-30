@@ -307,7 +307,19 @@
   }
   .prose-note a { color: var(--color-ink); text-decoration: underline; text-underline-offset: 2px; }
   .prose-note hr { border: 0; border-top: 1px solid var(--color-line); margin: 20px 0; }
-  .prose-note table { border-collapse: collapse; margin: 0 0 12px; }
+  /* A wide table has to scroll itself. Every prose surface sits in a card with
+     `overflow: hidden`, so without this a table wider than the column is simply
+     cut off with no way to reach the rest of it at any viewport — worst in the
+     two-column problem page, where the statement gets half the width. `display:
+     block` turns the table into its own scroll container; the rows still lay
+     themselves out as a table inside it. */
+  .prose-note table {
+    border-collapse: collapse;
+    margin: 0 0 12px;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
   .prose-note th, .prose-note td { border: 1px solid var(--color-line); padding: 5px 9px; text-align: left; }
 
   /* Errors.

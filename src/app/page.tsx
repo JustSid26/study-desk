@@ -1,65 +1,69 @@
 /**
- * Dashboard — a Server Component. Everything on this page is read straight from
- * SQLite at request time; only the two header actions cross into the client.
+ * Dashboard — a Server Component.
  *
- * The heatmap window is walked with `dayRange`/`addDays`, never by adding
- * 86_400_000ms, so the "active days" count doesn't drift a day at each DST
- * boundary and quietly disagree with the streak.
+ * There is no study-time table any more, so nothing here counts minutes: a day
+ * counts because you solved a problem or touched a note in the vault. The four
+ * tiles, the heatmap and the LeetCode card all read from `getDashboard()`; the
+ * note rows come off the filesystem, which is the source of truth for the vault.
  */
 import Link from "next/link";
 
-import { getDashboard, getNotes, getRecentSessions } from "@/lib/queries";
-import {
-  addDays,
-  dayRange,
-  formatDay,
-  formatFullDay,
-  formatMins,
-  relativeTime,
-  today,
-} from "@/lib/dates";
+import { getDashboard } from "@/lib/queries";
+import { recentFiles, type NoteKind } from "@/lib/vault";
+import { addDays, dayRange, formatFullDay, relativeTime, today } from "@/lib/dates";
 import { Heatmap, HeatmapKey } from "@/components/heatmap";
-import { subjectColor } from "@/components/subject-color";
-import { kindLabel } from "@/components/note-list";
-import { LogProblemButton, LogSessionButton } from "@/components/log-dialogs";
-import { DIFFICULTY_COLOR } from "@/app/leetcode/bits";
+import { DIFFICULTY_COLOR, DifficultyChip } from "@/app/leetcode/bits";
 import {
   BarRow,
   Card,
   CardBody,
   CardHeader,
-  Chip,
   Empty,
-  Meter,
   PageHeader,
   StatTile,
   linkButtonClass,
 } from "@/components/ui";
 
+import { listClasses } from "./timetable/data";
+import { fmtRange, minutesOf, mondayIndex, byStart, DAY_LABELS } from "./timetable/bits";
+
 export const dynamic = "force-dynamic";
 
 const WEEKS = 26;
-const SUBJECT_ROWS = 5;
 const NOTE_ROWS = 6;
+const REVISIT_ROWS = 5;
 
 const LINK_PRIMARY = linkButtonClass({ variant: "primary" });
 const LINK_QUIET =
   "text-[12px] font-medium text-accent underline decoration-from-font underline-offset-2";
-
 const CARD_TITLE = "text-[13.5px] font-semibold text-ink";
-
-/* -------------------------------- copy ---------------------------------- */
-
-function todayLine(minutes: number, goal: number): string {
-  if (minutes <= 0) return "Nothing logged yet today";
-  if (goal > 0 && minutes >= goal) return `Goal met — ${formatMins(minutes)} logged`;
-  if (goal <= 0) return `${formatMins(minutes)} logged`;
-  return `${formatMins(goal - minutes)} to go to hit today's goal`;
-}
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-/* ------------------------------ note icons ------------------------------- */
+/* --------------------------------- copy ---------------------------------- */
+
+function todayLine(solved: number, goal: number): string {
+  if (goal <= 0) {
+    return solved > 0
+      ? `${solved} ${plural(solved, "problem", "problems")} solved today`
+      : "No problems solved today";
+  }
+  if (solved >= goal) return `${solved} of ${goal} problems today — done`;
+  const left = goal - solved;
+  return `${solved} of ${goal} problems today — ${left} to go`;
+}
+
+/* ------------------------------ note rows -------------------------------- */
+
+const KIND_LABEL: Record<NoteKind, string> = {
+  markdown: "Note",
+  text: "Text",
+  image: "Image",
+  pdf: "PDF",
+  docx: "Word",
+  doc: "Word",
+  file: "File",
+};
 
 const ICON = {
   width: 15,
@@ -72,7 +76,7 @@ const ICON = {
   strokeLinejoin: "round",
 } as const;
 
-function NoteKindIcon({ kind }: { kind: string }) {
+function NoteKindIcon({ kind }: { kind: NoteKind }) {
   if (kind === "image") {
     return (
       <svg {...ICON} aria-hidden="true">
@@ -107,13 +111,21 @@ function NoteKindIcon({ kind }: { kind: string }) {
   );
 }
 
+/** "OS/Unit 1/paging.pdf" -> "OS". A file at the vault root has no subject. */
+const subjectOf = (rel: string) => {
+  const parts = rel.split("/").filter(Boolean);
+  return parts.length > 1 ? parts[0] : null;
+};
+
+const stem = (name: string) => name.replace(/\.[A-Za-z0-9]{1,8}$/, "") || name;
+
 /* --------------------------------- page ---------------------------------- */
 
 export default async function DashboardPage() {
-  const [dash, notes, recent] = await Promise.all([
+  const [dash, notes, classes] = await Promise.all([
     getDashboard(),
-    getNotes(),
-    getRecentSessions(1),
+    recentFiles(NOTE_ROWS),
+    listClasses(),
   ]);
 
   const {
@@ -123,42 +135,41 @@ export default async function DashboardPage() {
     streak,
     best,
     todayActivity,
-    weekMinutes,
     weekProblems,
-    subjects,
     problems,
     byDifficulty,
     noteCount,
     revisitQueue,
   } = dash;
 
-  const dailyGoal = settings.dailyMins > 0 ? settings.dailyMins : 0;
-  const weeklyGoal = dailyGoal * 7;
-  const weekPct = weeklyGoal > 0 ? Math.round((weekMinutes / weeklyGoal) * 100) : 0;
+  const dailyProblems = settings.dailyProblems > 0 ? settings.dailyProblems : 0;
+  const weeklyGoal = dailyProblems * 7;
+  const weekPct = weeklyGoal > 0 ? Math.round((weekProblems / weeklyGoal) * 100) : 0;
 
-  // Calendar-correct walk over the heatmap's own window.
+  // Calendar-correct walk over the heatmap's own window, so the summary under
+  // it can never disagree with the squares by a day at a DST boundary.
   const windowDays = dayRange(addDays(new Date(), -(WEEKS * 7 - 1)), new Date());
   let windowActive = 0;
-  let windowMinutes = 0;
+  let windowProblems = 0;
   for (const day of windowDays) {
     if (activeDays.has(day)) windowActive += 1;
-    windowMinutes += activity.get(day)?.minutes ?? 0;
+    windowProblems += activity.get(day)?.problems ?? 0;
   }
 
-  const lastSession = recent[0];
-  const shownSubjects = subjects.slice(0, SUBJECT_ROWS);
-  const recentNotes = notes.slice(0, NOTE_ROWS);
+  const now = new Date();
+  const todayWeekday = mondayIndex(now);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const todaysClasses = classes.filter((c) => c.weekday === todayWeekday).sort(byStart);
+
+  const revisits = revisitQueue.slice(0, REVISIT_ROWS);
   const totalSolved = problems.length;
 
   return (
     <>
       <PageHeader
         title="Dashboard"
-        sub={`${formatFullDay(today())} · ${todayLine(todayActivity.minutes, dailyGoal)}`}
-      >
-        <LogSessionButton subjects={subjects.map((s) => ({ id: s.id, name: s.name }))} />
-        <LogProblemButton />
-      </PageHeader>
+        sub={`${formatFullDay(today())} · ${todayLine(todayActivity.problems, dailyProblems)}`}
+      />
 
       {/* ------------------------------ stats ------------------------------ */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -175,26 +186,30 @@ export default async function DashboardPage() {
           sub={best > 0 ? `Best run ${best} ${plural(best, "day", "days")}` : "No run yet"}
         />
         <StatTile
-          label="This week"
-          value={formatMins(weekMinutes)}
+          label="Problems this week"
+          value={weekProblems}
           sub={
             weeklyGoal > 0
-              ? `${weekPct}% of the ${formatMins(weeklyGoal)} weekly goal`
-              : "No daily goal set"
+              ? `${weekPct}% of the ${weeklyGoal} a week your daily target implies`
+              : "No daily problem target set"
           }
         />
         <StatTile
-          label="Problems solved"
+          label="Solved all time"
           value={totalSolved}
-          sub={`${weekProblems} in the last 7 days`}
+          sub={
+            totalSolved
+              ? `${byDifficulty.Hard} hard, ${byDifficulty.Medium} medium, ${byDifficulty.Easy} easy`
+              : "Nothing logged yet"
+          }
         />
         <StatTile
-          label="Notes kept"
+          label="Notes in the vault"
           value={noteCount}
           sub={
-            recentNotes.length
-              ? `Last updated ${relativeTime(recentNotes[0].updatedAt)}`
-              : "Nothing written yet"
+            notes.length
+              ? `Last touched ${relativeTime(notes[0].modified)}`
+              : "Nothing filed yet"
           }
         />
       </div>
@@ -206,70 +221,186 @@ export default async function DashboardPage() {
           <HeatmapKey />
         </CardHeader>
         <CardBody>
-          <Heatmap activity={activity} goalMins={dailyGoal || 60} weeks={WEEKS} />
+          <Heatmap
+            activity={activity}
+            goalProblems={dailyProblems || 2}
+            weeks={WEEKS}
+          />
           <p className="mt-3 text-[12px] leading-snug text-ink-3">
             {windowActive} active {plural(windowActive, "day", "days")} in the last {WEEKS}{" "}
-            weeks · {formatMins(windowMinutes)} logged
-            {lastSession
-              ? ` · last session ${formatMins(lastSession.minutes)}${
-                  lastSession.subjectName ? ` on ${lastSession.subjectName}` : ""
-                }, ${formatDay(lastSession.day)}`
-              : ""}
+            weeks · {windowProblems} {plural(windowProblems, "problem", "problems")} solved,
+            shaded against {dailyProblems || 2} a day.
           </p>
         </CardBody>
       </Card>
 
-      {/* --------------------- subjects + leetcode ------------------------- */}
+      {/* -------------------- next up + revisit queue ---------------------- */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <h2 className={CARD_TITLE}>Subjects</h2>
-            {subjects.length > SUBJECT_ROWS ? (
-              <Link href="/subjects" className={LINK_QUIET}>
-                See all {subjects.length}
-              </Link>
-            ) : null}
+            <h2 className={CARD_TITLE}>Next up</h2>
+            <Link href="/timetable" className={LINK_QUIET}>
+              Timetable
+            </Link>
           </CardHeader>
-          {shownSubjects.length ? (
-            <CardBody className="py-2">
-              <ul className="flex flex-col">
-                {shownSubjects.map((s) => (
+          {todaysClasses.length ? (
+            <ul className="flex flex-col">
+              {todaysClasses.map((c) => {
+                const live = minutesOf(c.startsAt) <= nowMin && nowMin < minutesOf(c.endsAt);
+                const done = minutesOf(c.endsAt) <= nowMin;
+                return (
                   <li
-                    key={s.id}
-                    className="flex flex-col gap-1.5 border-b border-line-soft py-2.5 last:border-b-0"
+                    key={c.id}
+                    className={`border-b border-line-soft last:border-b-0 ${
+                      live ? "bg-surface-3" : ""
+                    }`}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="flex min-w-0 items-center gap-2">
+                    <div className="flex items-start gap-3 px-4 py-2.5">
+                      <span
+                        className={`w-[84px] shrink-0 font-mono text-[11.5px] leading-snug tabular-nums ${
+                          done && !live ? "text-ink-3" : "text-ink-2"
+                        }`}
+                      >
+                        {fmtRange(c.startsAt, c.endsAt)}
+                      </span>
+                      <span className="min-w-0 flex-1">
                         <span
-                          aria-hidden="true"
-                          className="inline-block h-[8px] w-[8px] shrink-0 rounded-full"
-                          style={{ backgroundColor: subjectColor(s.color) }}
-                        />
-                        <span className="truncate text-[13.5px] font-medium text-ink">
-                          {s.name}
+                          className={`block truncate text-[13.5px] ${
+                            live ? "font-semibold text-ink" : "font-medium text-ink"
+                          }`}
+                        >
+                          {c.title}
                         </span>
+                        {c.location ? (
+                          <span className="mt-0.5 block truncate text-[11.5px] text-ink-3">
+                            {c.location}
+                          </span>
+                        ) : null}
                       </span>
-                      <span className="shrink-0 text-[11.5px] tabular-nums text-ink-3">
-                        {s.counts.solid} of {s.topics.length}{" "}
-                        {plural(s.topics.length, "topic", "topics")} solid
-                      </span>
+                      {live ? (
+                        <span className="shrink-0 rounded-full bg-accent px-2 py-[3px] text-[10px] font-semibold leading-none text-on-accent">
+                          Now
+                        </span>
+                      ) : null}
                     </div>
-                    <Meter value={s.progress} />
                   </li>
-                ))}
-              </ul>
-            </CardBody>
+                );
+              })}
+            </ul>
           ) : (
             <Empty
-              title="No subjects yet"
+              title={`Nothing on ${DAY_LABELS[todayWeekday]}`}
               action={
-                <Link href="/subjects" className={LINK_PRIMARY}>
-                  Add a subject
+                <Link href="/timetable" className={LINK_PRIMARY}>
+                  Open the timetable
                 </Link>
               }
             >
-              A subject holds its topics, its notes and the time you put into it. Add the
-              first one to start tracking mastery.
+              A class is a weekly repeating slot. Add one and today&rsquo;s classes show up
+              here in order.
+            </Empty>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <h2 className={CARD_TITLE}>Revisit queue</h2>
+            {revisitQueue.length > REVISIT_ROWS ? (
+              <Link href="/leetcode" className={LINK_QUIET}>
+                See all {revisitQueue.length}
+              </Link>
+            ) : null}
+          </CardHeader>
+          {revisits.length ? (
+            <ul className="flex flex-col">
+              {revisits.map(({ problem, reason }) => (
+                <li key={problem.id} className="border-b border-line-soft last:border-b-0">
+                  <Link
+                    href={`/leetcode/${encodeURIComponent(problem.slug)}`}
+                    className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-2"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13.5px] font-medium text-ink">
+                        {problem.number ? `${problem.number}. ` : ""}
+                        {problem.title}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11.5px] text-ink-3">
+                        {reason}
+                      </span>
+                    </span>
+                    <span className="shrink-0">
+                      <DifficultyChip difficulty={problem.difficulty} />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty
+              title="Nothing waiting"
+              action={
+                <Link href="/leetcode" className={LINK_PRIMARY}>
+                  Open LeetCode
+                </Link>
+              }
+            >
+              Problems come back here once they go stale, or the moment you flag one as worth
+              a second look.
+            </Empty>
+          )}
+        </Card>
+      </div>
+
+      {/* ------------------- recent notes + leetcode ----------------------- */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <h2 className={CARD_TITLE}>Recent notes</h2>
+            <Link href="/subjects" className={LINK_QUIET}>
+              Subjects
+            </Link>
+          </CardHeader>
+          {notes.length ? (
+            <ul className="flex flex-col">
+              {notes.map((n) => {
+                const subject = subjectOf(n.rel);
+                return (
+                  <li key={n.rel} className="border-b border-line-soft last:border-b-0">
+                    <Link
+                      href={`/subjects?file=${encodeURIComponent(n.rel)}`}
+                      className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-2"
+                    >
+                      <span className="shrink-0 text-ink-3" title={KIND_LABEL[n.kind]}>
+                        <NoteKindIcon kind={n.kind} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13.5px] font-medium text-ink">
+                          {stem(n.name)}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11.5px] text-ink-3">
+                          {subject ? `${subject} · ` : ""}
+                          {KIND_LABEL[n.kind]}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[11.5px] tabular-nums text-ink-3">
+                        {relativeTime(n.modified)}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <Empty
+              title="No notes yet"
+              action={
+                <Link href="/subjects" className={LINK_PRIMARY}>
+                  Open Subjects
+                </Link>
+              }
+            >
+              A subject is a folder in the vault. Make one, then type a note into it or drop a
+              PDF straight in.
             </Empty>
           )}
         </Card>
@@ -313,21 +444,6 @@ export default async function DashboardPage() {
                   valueText={`${byDifficulty.Hard} / ${settings.goalHard}`}
                 />
               </div>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-line-soft pt-3">
-                <span className="text-[12.5px] text-ink-2">
-                  {revisitQueue.length
-                    ? `${revisitQueue.length} ${plural(
-                        revisitQueue.length,
-                        "problem",
-                        "problems",
-                      )} waiting for a revisit`
-                    : "Nothing waiting for a revisit"}
-                </span>
-                <Link href="/leetcode" className={LINK_QUIET}>
-                  Go to the revisit queue
-                </Link>
-              </div>
             </CardBody>
           ) : (
             <Empty
@@ -338,63 +454,12 @@ export default async function DashboardPage() {
                 </Link>
               }
             >
-              Log a solve by hand, or connect your LeetCode username in Setup to import
-              everything you have already done.
+              Connect your LeetCode username in Setup to import everything you have already
+              solved, or log one by hand.
             </Empty>
           )}
         </Card>
       </div>
-
-      {/* ------------------------------ recent ----------------------------- */}
-      <Card>
-        <CardHeader>
-          <h2 className={CARD_TITLE}>Recent</h2>
-          {notes.length > NOTE_ROWS ? (
-            <Link href="/notes" className={LINK_QUIET}>
-              See all {notes.length}
-            </Link>
-          ) : null}
-        </CardHeader>
-        {recentNotes.length ? (
-          <ul className="flex flex-col">
-            {recentNotes.map((n) => (
-              <li key={n.id} className="border-b border-line-soft last:border-b-0">
-                <Link
-                  href={`/notes?note=${encodeURIComponent(n.id)}`}
-                  className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-2"
-                >
-                  <span className="shrink-0 text-ink-3" title={kindLabel(n.kind)}>
-                    <NoteKindIcon kind={n.kind} />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-ink">
-                    {n.title.trim() || "Untitled note"}
-                  </span>
-                  {n.subjectName ? (
-                    <Chip dot={subjectColor(n.subjectColor)} className="hidden shrink-0 sm:inline-flex">
-                      {n.subjectName}
-                    </Chip>
-                  ) : null}
-                  <span className="shrink-0 text-[11.5px] tabular-nums text-ink-3">
-                    {relativeTime(n.updatedAt)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Empty
-            title="No notes yet"
-            action={
-              <Link href="/notes" className={LINK_PRIMARY}>
-                Write a note
-              </Link>
-            }
-          >
-            Notes are where the thinking lands — paste a proof, drop in a PDF, or keep a
-            list of what tripped you up.
-          </Empty>
-        )}
-      </Card>
     </>
   );
 }
