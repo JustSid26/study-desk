@@ -1,0 +1,332 @@
+@import "tailwindcss";
+
+/* ===========================================================================
+   Study Tracker — monochrome.
+
+   One hue, used as light. Emphasis comes from contrast and weight, never from
+   colour, so nothing on screen competes with the work: the only thing that can
+   be "the bright thing" is your own data.
+
+   The grey is very slightly cool (hue ~215° at almost no chroma) rather than a
+   dead neutral — it reads as considered graphite instead of default #808080.
+
+   Difficulty is ORDINAL (Easy < Medium < Hard), so it is encoded as a lightness
+   ramp rather than three hues. That is both monochrome and more correct than
+   arbitrary colours — and every mark still carries its text label, so the ramp
+   is reinforcement, never the sole carrier of meaning.
+
+   Every colour is defined on bare :root and only REDEFINED in the two dark
+   scopes, so nothing depends on a media query resolving.
+   ========================================================================= */
+
+@theme {
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: var(--font-newsreader), Georgia, "Times New Roman", serif;
+
+  /* --- grounds ---------------------------------------------------------- */
+  --color-canvas: #f4f6f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef1f3;
+  --color-surface-3: #f7f9fa;
+
+  --color-line: #e2e6e9;
+  --color-line-soft: #edf0f2;
+  --color-line-strong: #cfd5da;
+
+  /* --- ink -------------------------------------------------------------- */
+  --color-ink: #14181b;
+  --color-ink-2: #525a61;
+  --color-ink-3: #646d74; /* >=4.65:1 on every ground it lands on, incl. surface-2 */
+
+  /* --- emphasis ---------------------------------------------------------
+     In a monochrome system the accent is maximum contrast, not a hue. */
+  --color-accent: #14181b;
+  --color-accent-2: #000000;
+  --color-accent-soft: #eef1f3;
+  --color-on-accent: #ffffff;
+
+  /* Streak / attention. Still monochrome — it earns emphasis by being the
+     darkest ink on a filled chip, not by turning red. */
+  --color-flame: #14181b;
+  --color-flame-soft: #e6eaec;
+
+  /* --- difficulty: ordinal lightness ramp, validated ≥2:1 at the light end */
+  --color-easy: #98a0a7;
+  --color-medium: #5c646b;
+  --color-hard: #16191c;
+  --color-learning: #7d868e;
+
+  /* --- activity heatmap: 0 is "nothing logged" and may recede to the
+         surface; steps 1-4 are data and each clears 2:1. */
+  --color-heat-0: #eaedef;
+  --color-heat-1: #aeb6bd;
+  --color-heat-2: #7d868e;
+  --color-heat-3: #4b535a;
+  --color-heat-4: #1c2124;
+
+  /* --- glass ------------------------------------------------------------ */
+  --color-glass: rgba(255, 255, 255, 0.62);
+  --color-glass-edge: rgba(255, 255, 255, 0.75);
+  --color-glass-shade: rgba(20, 24, 27, 0.08);
+}
+
+@layer base {
+  :root {
+    --wash-a: rgba(120, 136, 150, 0.1);
+    --wash-b: rgba(90, 104, 118, 0.07);
+    --shadow-card: 0 1px 2px rgba(20, 24, 27, 0.04);
+    --shadow-glass: 0 1px 1px rgba(20, 24, 27, 0.04), 0 12px 32px -18px rgba(20, 24, 27, 0.3);
+    --shadow-lift: 0 2px 6px -2px rgba(20, 24, 27, 0.08), 0 18px 40px -24px rgba(20, 24, 27, 0.35);
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+
+      --color-canvas: #0b0e10;
+      --color-surface: #14181a;
+      --color-surface-2: #1d2225;
+      --color-surface-3: #171b1e;
+
+      --color-line: #272d31;
+      --color-line-soft: #1f2427;
+      --color-line-strong: #394146;
+
+      --color-ink: #eef1f3;
+      --color-ink-2: #a3acb3;
+      --color-ink-3: #8d979e;
+
+      --color-accent: #eef1f3;
+      --color-accent-2: #ffffff;
+      --color-accent-soft: #232a2e;
+      --color-on-accent: #0b0e10;
+
+      --color-flame: #eef1f3;
+      --color-flame-soft: #232a2e;
+
+      --color-easy: #666e75;
+      --color-medium: #9ba3aa;
+      --color-hard: #e8ebed;
+      --color-learning: #8b949c;
+
+      --color-heat-0: #1b2023;
+      --color-heat-1: #454e55;
+      --color-heat-2: #6b747c;
+      --color-heat-3: #98a2aa;
+      --color-heat-4: #dde2e6;
+
+      --color-glass: rgba(23, 28, 31, 0.62);
+      --color-glass-edge: rgba(255, 255, 255, 0.08);
+      --color-glass-shade: rgba(0, 0, 0, 0.3);
+
+      --wash-a: rgba(150, 170, 190, 0.07);
+      --wash-b: rgba(110, 130, 150, 0.05);
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-glass: 0 1px 1px rgba(0, 0, 0, 0.3), 0 14px 36px -20px rgba(0, 0, 0, 0.8);
+      --shadow-lift: 0 2px 6px -2px rgba(0, 0, 0, 0.4), 0 20px 44px -26px rgba(0, 0, 0, 0.9);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --color-canvas: #0b0e10;
+    --color-surface: #14181a;
+    --color-surface-2: #1d2225;
+    --color-surface-3: #171b1e;
+
+    --color-line: #272d31;
+    --color-line-soft: #1f2427;
+    --color-line-strong: #394146;
+
+    --color-ink: #eef1f3;
+    --color-ink-2: #a3acb3;
+    --color-ink-3: #8d979e;
+
+    --color-accent: #eef1f3;
+    --color-accent-2: #ffffff;
+    --color-accent-soft: #232a2e;
+    --color-on-accent: #0b0e10;
+
+    --color-flame: #eef1f3;
+    --color-flame-soft: #232a2e;
+
+    --color-easy: #666e75;
+    --color-medium: #9ba3aa;
+    --color-hard: #e8ebed;
+    --color-learning: #8b949c;
+
+    --color-heat-0: #1b2023;
+    --color-heat-1: #454e55;
+    --color-heat-2: #6b747c;
+    --color-heat-3: #98a2aa;
+    --color-heat-4: #dde2e6;
+
+    --color-glass: rgba(23, 28, 31, 0.62);
+    --color-glass-edge: rgba(255, 255, 255, 0.08);
+    --color-glass-shade: rgba(0, 0, 0, 0.3);
+
+    --wash-a: rgba(150, 170, 190, 0.07);
+    --wash-b: rgba(110, 130, 150, 0.05);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-glass: 0 1px 1px rgba(0, 0, 0, 0.3), 0 14px 36px -20px rgba(0, 0, 0, 0.8);
+    --shadow-lift: 0 2px 6px -2px rgba(0, 0, 0, 0.4), 0 20px 44px -26px rgba(0, 0, 0, 0.9);
+  }
+
+  * {
+    border-color: var(--color-line);
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* The wash exists so the glass surfaces have something to refract. Two very
+     soft off-axis pools, low enough in contrast to read as paper grain. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(58rem 42rem at 12% -8%, var(--wash-a), transparent 62%),
+      radial-gradient(48rem 38rem at 96% 8%, var(--wash-b), transparent 58%);
+  }
+
+  h1, h2, h3, h4 {
+    text-wrap: balance;
+    letter-spacing: -0.021em;
+    font-weight: 600;
+  }
+
+  /* Optical correction: large type needs tighter tracking than small type. */
+  h1 { letter-spacing: -0.032em; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Uppercase mono eyebrow — every field label and card kicker. */
+  .lbl {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--color-ink-3);
+    font-weight: 500;
+  }
+
+  /* Data cards stay opaque: dense text over a blurred backdrop is harder to
+     read, and this app is read for hours at a time. */
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Glass is reserved for chrome that floats over content — the rail, the
+     mobile bar, dialogs. Never for a surface carrying body text. */
+  .glass {
+    background-color: var(--color-glass);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    backdrop-filter: blur(22px) saturate(180%);
+    border-color: var(--color-glass-edge);
+    box-shadow: var(--shadow-glass);
+  }
+
+  /* Safari and Firefox without backdrop-filter would render the translucent
+     background alone, which is unreadable. Fall back to the solid surface. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background-color: var(--color-surface);
+    }
+  }
+
+  .prose-note {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.65;
+    max-width: 66ch;
+    color: var(--color-ink);
+  }
+  .prose-note h1 { font-family: var(--font-sans); font-size: 19px; margin: 22px 0 8px; }
+  .prose-note h2 { font-family: var(--font-sans); font-size: 16px; margin: 20px 0 6px; }
+  .prose-note h3 { font-family: var(--font-sans); font-size: 14px; margin: 16px 0 5px; }
+  .prose-note p { margin: 0 0 12px; }
+  .prose-note ul, .prose-note ol { margin: 0 0 12px; padding-left: 22px; }
+  .prose-note ul { list-style: disc; }
+  .prose-note ol { list-style: decimal; }
+  .prose-note li { margin: 4px 0; }
+  .prose-note code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background-color: var(--color-surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .prose-note pre {
+    background-color: var(--color-surface-2);
+    padding: 12px 14px;
+    border-radius: 10px;
+    overflow-x: auto;
+    margin: 0 0 12px;
+  }
+  .prose-note pre code { background: transparent; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  .prose-note blockquote {
+    margin: 0 0 12px;
+    padding: 2px 0 2px 14px;
+    border-left: 2px solid var(--color-line-strong);
+    color: var(--color-ink-2);
+  }
+  .prose-note a { color: var(--color-ink); text-decoration: underline; text-underline-offset: 2px; }
+  .prose-note hr { border: 0; border-top: 1px solid var(--color-line); margin: 20px 0; }
+  .prose-note table { border-collapse: collapse; margin: 0 0 12px; }
+  .prose-note th, .prose-note td { border: 1px solid var(--color-line); padding: 5px 9px; text-align: left; }
+
+  /* Errors.
+     With no red available, an alert has to earn its distinction structurally:
+     a hairline rule and an inset, so it reads as a different KIND of text at a
+     glance rather than as prose that happens to be worded badly. Every error in
+     the app already carries role="alert" for screen readers, so styling that
+     attribute keeps the visual and the semantic signal in lockstep — they
+     cannot drift apart the way a hand-applied class would. */
+  [role="alert"] {
+    border-left: 2px solid var(--color-ink);
+    padding-left: 9px;
+    color: var(--color-ink);
+  }
+
+  /* Native dialog: glass panel, dimmed monochrome backdrop. */
+  dialog::backdrop {
+    background: rgba(11, 14, 16, 0.42);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+}
