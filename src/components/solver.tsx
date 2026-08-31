@@ -3,7 +3,12 @@
 /**
  * The editor pane of the in-app problem screen.
  *
- * Deliberately a plain <textarea>. A full code editor is ~1MB of JavaScript to
+ * The editing surface is <CodeEditor> (CodeMirror): syntax highlighting,
+ * bracket closing and auto-indent, with the grammar loaded on demand for
+ * whichever language you pick. What follows is the part that is ours — the
+ * per-language buffers, autosave, and the run/submit round trip.
+ *
+ * (Previously a plain <textarea>. A full code editor is ~1MB of JavaScript to
  * get bracket matching on a page whose real work happens on LeetCode's judge;
  * what a solver actually needs is a monospaced box that doesn't eat Tab and
  * doesn't lose the attempt when you navigate away. Both of those are cheap.
@@ -27,6 +32,8 @@ import {
   Textarea,
 } from "@/components/ui";
 import { recordAccepted, saveDraft } from "@/app/actions/solver";
+import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
+import { usePalette } from "@/components/use-palette";
 
 /** Mirrors `JudgeResult` from `@/lib/leetcode`, which the client can't import. */
 export interface JudgeView {
@@ -63,7 +70,6 @@ export interface SolverProps {
   langLabels: Record<string, string>;
 }
 
-const TAB = "    ";
 
 /** Preferred defaults, in order, when there is no saved draft to follow. */
 const FALLBACK_LANGS = ["python3", "java"];
@@ -125,13 +131,10 @@ export function Solver({
   // Per-language buffers, so flicking between Python and Java to compare
   // approaches doesn't throw away whichever one you weren't looking at.
   const buffers = React.useRef<Record<string, string>>({});
-  const taRef = React.useRef<HTMLTextAreaElement>(null);
+  const editorRef = React.useRef<CodeEditorHandle>(null);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
   const abortRef = React.useRef<AbortController | null>(null);
-  const selectionRef = React.useRef<{ start: number; end: number } | null>(null);
-  // A textarea that swallows Tab would trap the keyboard. Escape releases the
-  // next Tab so there is always a way out without a mouse.
-  const escapedRef = React.useRef(false);
+  const [palette, setPalette] = usePalette();
 
   /* ------------------------------ autosave ------------------------------- */
 
@@ -159,18 +162,6 @@ export function Solver({
         ? "Saved"
         : "Draft";
 
-  /* --------------------------- caret restoration -------------------------- */
-
-  // A controlled textarea puts the caret at the end after every re-render, so
-  // the position we computed before the edit has to be re-applied afterwards.
-  React.useLayoutEffect(() => {
-    const want = selectionRef.current;
-    if (!want) return;
-    selectionRef.current = null;
-    const el = taRef.current;
-    if (el) el.setSelectionRange(want.start, want.end);
-  });
-
   React.useEffect(() => {
     const el = dialogRef.current;
     if (!el) return;
@@ -182,8 +173,7 @@ export function Solver({
 
   /* ------------------------------- editing -------------------------------- */
 
-  const edit = (next: string, selection?: { start: number; end: number }) => {
-    if (selection) selectionRef.current = selection;
+  const edit = (next: string) => {
     buffers.current[lang] = next;
     setCode(next);
   };
@@ -198,61 +188,6 @@ export function Solver({
     setLang(next);
     setCode(buffers.current[next] ?? initialDrafts[next] ?? snippets[next] ?? "");
     setSaveFailed(false);
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Escape") {
-      escapedRef.current = true;
-      return;
-    }
-    if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey) {
-      escapedRef.current = false;
-      return;
-    }
-    if (escapedRef.current) {
-      escapedRef.current = false;
-      return; // let the browser move focus
-    }
-
-    const el = e.currentTarget;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const value = el.value;
-    e.preventDefault();
-
-    const multiline = start !== end && value.slice(start, end).includes("\n");
-
-    if (!multiline && !e.shiftKey) {
-      const next = value.slice(0, start) + TAB + value.slice(end);
-      edit(next, { start: start + TAB.length, end: start + TAB.length });
-      return;
-    }
-
-    // Block indent / outdent, on whole lines.
-    const from = value.lastIndexOf("\n", start - 1) + 1;
-    const toRaw = value.indexOf("\n", end);
-    const to = toRaw === -1 ? value.length : toRaw;
-    const block = value.slice(from, to);
-
-    let removedFirst = 0;
-    let removedTotal = 0;
-    const lines = block.split("\n").map((line, i) => {
-      if (!e.shiftKey) {
-        if (i === 0) removedFirst = -TAB.length;
-        removedTotal -= TAB.length;
-        return TAB + line;
-      }
-      const cut = /^ {1,4}/.exec(line)?.[0].length ?? 0;
-      if (i === 0) removedFirst = cut;
-      removedTotal += cut;
-      return line.slice(cut);
-    });
-
-    const next = value.slice(0, from) + lines.join("\n") + value.slice(to);
-    edit(next, {
-      start: Math.max(from, start - removedFirst),
-      end: Math.max(from, end - removedTotal),
-    });
   }
 
   /* -------------------------------- judge --------------------------------- */
@@ -368,24 +303,42 @@ export function Solver({
       </CardHeader>
 
       <CardBody className="flex min-w-0 flex-col gap-3">
-        <Textarea
-          ref={taRef}
-          value={code}
-          onChange={(e) => edit(e.target.value)}
-          onKeyDown={onKeyDown}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoComplete="off"
-          wrap="off"
-          aria-label={`Your ${label(lang)} solution to ${title}`}
-          style={{ tabSize: 4 }}
-          className="min-h-[340px] overflow-auto whitespace-pre font-mono text-[13px] leading-[1.55] lg:min-h-[420px]"
-        />
-        <p className="text-[11.5px] leading-snug text-ink-3">
-          Tab indents by four spaces. Press Escape then Tab to move on to the next
-          control.
-        </p>
+        <div className="min-h-[340px] overflow-hidden rounded-[10px] border border-line bg-surface lg:min-h-[420px]">
+          <CodeEditor
+            ref={editorRef}
+            value={code}
+            language={lang}
+            palette={palette}
+            ariaLabel={`Your ${label(lang)} solution to ${title}`}
+            className="h-[340px] lg:h-[420px]"
+            onChange={edit}
+            onRun={() => { if (!busy) void judge("run"); }}
+          />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11.5px] text-ink-3">
+          <p className="leading-snug">
+            Brackets close themselves and new lines keep their indent. Escape then Tab
+            moves on.
+          </p>
+          <div className="flex items-center gap-1">
+            <span className="lbl">Syntax</span>
+            {(["mono", "colour"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPalette(p)}
+                aria-pressed={palette === p}
+                className={`rounded-md px-2 py-0.5 font-medium ${
+                  palette === p
+                    ? "bg-accent text-on-accent"
+                    : "text-ink-3 hover:bg-surface-2 hover:text-ink"
+                }`}
+              >
+                {p === "mono" ? "Mono" : "Colour"}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <Field
           label="Testcase"

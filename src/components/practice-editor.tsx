@@ -1,18 +1,15 @@
 "use client";
 
 /**
- * The Practice editor — a textarea that behaves enough like an editor.
+ * The Practice editor.
  *
- * No CodeMirror, no Monaco: a 400KB editor bundle to type twenty lines of Java
- * would be the heaviest thing in the app. What a plain textarea is missing and
- * this adds back is the short list that actually hurts without it — Tab that
- * indents instead of leaving the field, a line-number gutter, save on Cmd+S,
- * run on Cmd+Enter, and a click-to-jump from an error to the line that caused it.
+ * The editing surface is <CodeEditor>, which wraps CodeMirror — syntax
+ * highlighting, bracket closing and auto-indent are the reasons, and each is
+ * something a textarea cannot do without reimplementing an editor. The grammar
+ * for a language loads on demand, so nothing is paid for a language not in use.
  *
- * The gutter is a second element scrolled in lockstep with the textarea, so the
- * two must agree on line height exactly — hence the literal `leading-[21px]` on
- * both, and `wrap="off"` so one logical line is always one visual line. Wrapping
- * would put the numbers out of step the moment a line ran long.
+ * This file keeps what surrounds the editor: autosave, the run request, the
+ * output panel, and the jump from a diagnostic to the line that caused it.
  *
  * `import type` only from the server modules: the types are erased at compile
  * time, so nothing from `server-only` is pulled into this bundle.
@@ -24,10 +21,10 @@ import type { RunResult } from "@/lib/runner";
 
 import { Button, Empty, Textarea } from "@/components/ui";
 import { savePracticeCode } from "@/app/actions/practice";
+import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
+import { usePalette } from "@/components/use-palette";
 
-const LINE_HEIGHT = 21;
 const SAVE_DEBOUNCE_MS = 700;
-const TAB = "    ";
 
 /**
  * The gutter and the textarea must be the same definite height, or the gutter
@@ -73,15 +70,11 @@ export function PracticeEditor({
   const [running, setRunning] = React.useState(false);
   const [result, setResult] = React.useState<RunResult | null>(null);
   const [runError, setRunError] = React.useState<string | null>(null);
-  const [activeLine, setActiveLine] = React.useState<number | null>(null);
 
-  const areaRef = React.useRef<HTMLTextAreaElement>(null);
-  const gutterRef = React.useRef<HTMLDivElement>(null);
+  const editorRef = React.useRef<CodeEditorHandle>(null);
   /** what is currently on disk, so an unchanged buffer never writes */
   const savedRef = React.useRef(initialCode);
-  // A textarea that swallows Tab would trap the keyboard. Escape releases the
-  // next Tab so there is always a way out without a mouse.
-  const escapedRef = React.useRef(false);
+  const [palette, setPalette] = usePalette();
 
   /* --------------------------------- save -------------------------------- */
 
@@ -117,7 +110,6 @@ export function PracticeEditor({
     if (!file || !available || running) return;
     setRunning(true);
     setRunError(null);
-    setActiveLine(null);
     try {
       // Run what is on screen, not what the debounce last happened to flush.
       await save(code);
@@ -150,72 +142,15 @@ export function PracticeEditor({
     }
   }, [available, code, file, lang, running, save, showInput, stdin]);
 
-  /* ------------------------------- keyboard ------------------------------- */
-
-  function onAreaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Escape") {
-      escapedRef.current = true;
-      return;
-    }
-    if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey) {
-      escapedRef.current = false;
-      return;
-    }
-    // Escape-then-Tab, and Shift+Tab on its own, always move focus: without
-    // both of those the editor is a keyboard trap (WCAG 2.1.2).
-    if (escapedRef.current || e.shiftKey) {
-      escapedRef.current = false;
-      return; // let the browser move focus
-    }
-    e.preventDefault();
-    const el = e.currentTarget;
-    const { selectionStart: start, selectionEnd: end } = el;
-    const next = code.slice(0, start) + TAB + code.slice(end);
-    setCode(next);
-    // React re-renders with the new value and would otherwise drop the caret at
-    // the end, so put it back on the next frame.
-    window.requestAnimationFrame(() => {
-      el.selectionStart = el.selectionEnd = start + TAB.length;
-    });
-  }
-
-  function onPaneKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    const mod = e.metaKey || e.ctrlKey;
-    if (!mod) return;
-    if (e.key === "s" || e.key === "S") {
-      e.preventDefault();
-      void save(code);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      void run();
-    }
-  }
-
   /* ------------------------------ line jumping ---------------------------- */
 
-  const syncGutter = () => {
-    if (gutterRef.current && areaRef.current) {
-      gutterRef.current.scrollTop = areaRef.current.scrollTop;
-    }
-  };
+  /** Jump the caret to a line — how a diagnostic gets you to its cause. */
+  const goToLine = React.useCallback((line: number) => {
+    editorRef.current?.goToLine(line);
+  }, []);
 
-  function goToLine(line: number) {
-    const el = areaRef.current;
-    if (!el) return;
-    const lines = code.split("\n");
-    const target = Math.min(Math.max(1, line), lines.length);
-    let offset = 0;
-    for (let i = 0; i < target - 1; i++) offset += lines[i].length + 1;
-
-    el.focus();
-    el.setSelectionRange(offset, offset);
-    el.scrollTop = Math.max(0, (target - 1) * LINE_HEIGHT - el.clientHeight / 2);
-    syncGutter();
-    setActiveLine(target);
-  }
-
-  const lineCount = React.useMemo(() => code.split("\n").length, [code]);
-  const gutterWidth = `${Math.max(2, String(lineCount).length)}ch`;
+  /** Save now, rather than on the debounce. Bound to Cmd/Ctrl+S in the editor. */
+  const flush = React.useCallback(() => save(code), [save, code]);
 
   /* -------------------------------- render -------------------------------- */
 
@@ -234,7 +169,7 @@ export function PracticeEditor({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3" onKeyDown={onPaneKeyDown}>
+    <div className="flex min-w-0 flex-col gap-3">
       {unavailableNote ? (
         <p role="alert" className="text-[13px] leading-relaxed">
           {unavailableNote}
@@ -275,43 +210,20 @@ export function PracticeEditor({
         </div>
 
         {/* ------------------------------ editor ----------------------------- */}
-        <div className="flex min-w-0 items-stretch bg-surface">
-          <div
-            ref={gutterRef}
-            aria-hidden="true"
-            className={`${PANE_HEIGHT} shrink-0 select-none overflow-hidden border-r border-line-soft bg-surface-3 py-3 pl-3 pr-2 text-right font-mono text-[12.5px] leading-[21px] text-ink-3`}
-            style={{ width: `calc(${gutterWidth} + 20px)` }}
-          >
-            {Array.from({ length: lineCount }, (_, i) => (
-              <div
-                key={i}
-                className={i + 1 === activeLine ? "font-medium text-ink" : undefined}
-              >
-                {i + 1}
-              </div>
-            ))}
-          </div>
-
-          {/* The focus outline is inset: the textarea sits flush against the
-              gutter inside an `overflow-hidden` card, which would clip an
-              outset one away entirely. */}
-          <textarea
-            ref={areaRef}
+        <div className={`${PANE_HEIGHT} min-w-0 overflow-hidden bg-surface`}>
+          <CodeEditor
+            ref={editorRef}
             value={code}
-            wrap="off"
-            spellCheck={false}
-            autoCapitalize="off"
-            autoCorrect="off"
-            autoComplete="off"
-            data-gramm="false"
-            aria-label={`${LANG_LABEL[lang]} source of ${file}`}
-            onChange={(e) => {
-              setCode(e.target.value);
+            language={lang}
+            palette={palette}
+            ariaLabel={file ? `${LANG_LABEL[lang]} source of ${file}` : "Code editor"}
+            className="h-full"
+            onChange={(next) => {
+              setCode(next);
               setSaveState("dirty");
             }}
-            onKeyDown={onAreaKeyDown}
-            onScroll={syncGutter}
-            className={`${PANE_HEIGHT} w-full min-w-0 resize-none bg-transparent px-3 py-3 font-mono text-[12.5px] leading-[21px] text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent`}
+            onSave={() => void flush()}
+            onRun={() => void run()}
           />
         </div>
 
@@ -338,11 +250,32 @@ export function PracticeEditor({
 
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line-soft px-4 py-2 text-[11.5px] text-ink-3">
           <span>{versions || "No toolchain detected"}</span>
-          <span className="font-mono">Cmd+S saves · Cmd+Enter runs</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <span className="lbl">Syntax</span>
+              {(["mono", "colour"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPalette(p)}
+                  aria-pressed={palette === p}
+                  className={`rounded-md px-2 py-0.5 text-[11.5px] font-medium ${
+                    palette === p
+                      ? "bg-accent text-on-accent"
+                      : "text-ink-3 hover:bg-surface-2 hover:text-ink"
+                  }`}
+                >
+                  {p === "mono" ? "Mono" : "Colour"}
+                </button>
+              ))}
+            </div>
+            <span className="font-mono">Cmd+S saves · Cmd+Enter runs</span>
+          </div>
         </div>
 
         <p className="border-t border-line-soft px-4 py-2 text-[11.5px] leading-snug text-ink-3">
-          Tab indents by four spaces. Press Escape then Tab to move on to the next control.
+          Brackets and quotes close themselves, and a new line keeps its indent. Tab
+          indents by four spaces — press Escape then Tab to move on to the next control.
         </p>
       </section>
 
