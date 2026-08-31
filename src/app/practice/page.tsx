@@ -15,6 +15,7 @@ import { isPracticeLang, type PracticeLang } from "@/lib/paths";
 import { listPracticeFiles, readPracticeFile } from "@/lib/practice";
 import { toolchainStatus } from "@/lib/runner";
 import { tracerAvailable } from "@/lib/tracer";
+import { JAVA_HINT, PYTHON_HINT } from "@/lib/toolchain";
 
 import { FileRail } from "./file-rail";
 
@@ -64,10 +65,12 @@ export default async function PracticePage({
     : "";
 
   const available = toolchain[lang].available;
+  // The install line differs per OS, so it comes from the toolchain module
+  // rather than being a generic "install it and restart".
   const unavailableNote = available
     ? null
     : `${COMMAND[lang]} isn't on this machine's PATH, so ${LABEL[lang]} can't run here. ` +
-      `You can still write and save files — install ${LABEL[lang]}, restart the app, and Run will work.`;
+      `You can still write and save files. ${lang === "java" ? JAVA_HINT : PYTHON_HINT}`;
 
   const versions = (["java", "python"] as const)
     .map((l) => toolchain[l].version || `${COMMAND[l]} not found`)

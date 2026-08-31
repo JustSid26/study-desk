@@ -74,6 +74,99 @@ One limitation worth knowing: LeetCode's accepted-problems listing carries no so
 so a first full import dates most problems to that day. Only the recent solves carry real
 dates. Everything logged afterwards is dated properly.
 
+## Setting up Java and Python
+
+Practice runs your code by shelling out to the real toolchains, so they have to be
+installed and on your `PATH`. Nothing is bundled. **Setup** shows what the app can
+currently find, and Run reports it plainly when something is missing.
+
+Two things matter more than the exact version:
+
+- It must be a **JDK, not a JRE.** A JRE has no `javac` to compile with and no
+  `jdk.jdi` module, which is what the visualiser is built on. Java **11 or newer**;
+  anything current is fine.
+- **Python must be 3.x.** The app probes `python3`, then `python`, and on Windows
+  the `py -3` launcher first, and only accepts one that reports a `Python 3.` banner
+  — so a stray Python 2 on the path will not be picked by mistake.
+
+### macOS
+
+```bash
+brew install openjdk            # then run the symlink line brew prints
+brew install python
+
+# without Homebrew: adoptium.net for the JDK, python.org for Python
+```
+
+Homebrew does not put `openjdk` on the path by itself — it prints a `sudo ln -sfn ...`
+line at the end. Run it, or Java stays invisible to the app.
+
+### Windows
+
+Install a JDK (**Temurin** from adoptium.net, or Oracle) and Python from **python.org**.
+
+Two things to get right, both easy to miss:
+
+- In the Python installer, tick **"Add python.exe to PATH"** on the first screen.
+- For the JDK, make sure its `bin` folder is on `PATH` — the Temurin installer offers
+  this as an option; Oracle's usually does it for you.
+
+Or with a package manager:
+
+```powershell
+winget install EclipseAdoptium.Temurin.21.JDK
+winget install Python.Python.3.12
+```
+
+Windows has no `python3` command — the installer creates `python.exe` and the `py`
+launcher. The app handles that itself, so you do not need to create an alias.
+
+> Avoid installing Python from the Microsoft Store if you can. Windows ships a stub
+> called `python3` that opens the Store instead of running anything; the app detects
+> and skips it, but a real install is less confusing.
+
+### Linux
+
+```bash
+# Debian / Ubuntu
+sudo apt install default-jdk python3
+
+# Fedora
+sudo dnf install java-latest-openjdk-devel python3
+
+# Arch
+sudo pacman -S jdk-openjdk python
+```
+
+Use `default-jdk`, not `default-jre`. The JRE packages have no compiler and no
+`jdk.jdi`, so both Run and Visualise fail on them.
+
+### Checking it worked
+
+```bash
+javac -version      # javac 21.x or newer
+java  -version
+python3 -V          # Python 3.x   (on Windows: py -3 -V)
+
+java --list-modules | grep jdk.jdi     # required for the visualiser
+```
+
+That last line is the one that matters for **Visualise**. If it prints nothing you
+have a JRE or a cut-down runtime; install a full JDK.
+
+Restart the dev server after installing anything — the toolchain is looked up when
+the server boots, not per request.
+
+### Visualise is Java-only
+
+Stepping through code line by line works for **Java** and not yet for Python. The JVM
+has no equivalent of Python's `sys.settrace`, so the Java support is a JDI client
+(`tools/tracer/Tracer.java`) that runs your file in a second JVM and records every
+line — which is why it needs a JDK rather than just an interpreter. Python would
+actually be the easier of the two to add; it simply is not built yet.
+
+Python still runs normally with **Run**, with the same error explanations.
+
 ## Your data
 
 Everything lives in `data/` — `study.db` and `subjects/`. Back up that one folder. It is

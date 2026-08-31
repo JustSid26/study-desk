@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { PRACTICE_LANGS, insidePractice, ensureDataDirs } from "./paths";
+import { DETACHED, killTree } from "./toolchain";
 
 /**
  * Java execution tracing.
@@ -96,7 +97,7 @@ interface ExecOut {
 
 function exec(cmd: string, args: string[], cwd: string, timeout: number): Promise<ExecOut> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { cwd, detached: DETACHED, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -112,11 +113,7 @@ function exec(cmd: string, args: string[], cwd: string, timeout: number): Promis
     const timer = setTimeout(() => {
       timedOut = true;
       // The tracer launches a second JVM; killing only the parent orphans it.
-      try {
-        process.kill(-child.pid!, "SIGKILL");
-      } catch {
-        child.kill("SIGKILL");
-      }
+      killTree(child);
     }, timeout);
 
     const finish = (code: number | null) => {

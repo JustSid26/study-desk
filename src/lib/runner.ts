@@ -10,6 +10,7 @@ import {
   insidePractice,
   type PracticeLang,
 } from "./paths";
+import { DETACHED, PYTHON_HINT, killTree, resolvePython } from "./toolchain";
 
 /**
  * Run a practice file — the "click Run instead of typing javac" part.
@@ -18,9 +19,9 @@ import {
  * you browse never fills up with .class files. Python runs in place.
  *
  * Guards, because this spawns a real process:
- *  - a wall-clock timeout, after which the whole process GROUP is killed
- *    (`detached: true` + `kill(-pid)`), since `javac`/`java` spawn children that
- *    survive killing the parent alone
+ *  - a wall-clock timeout, after which the whole process TREE is killed, since
+ *    `javac`/`java` spawn children that survive killing the parent alone. How
+ *    that is done differs by platform — see `killTree` in ./toolchain
  *  - output is capped, so `while True: print(1)` cannot exhaust memory
  *  - stdin is closed unless input is supplied, so a program waiting on input
  *    fails fast instead of hanging until the timeout
@@ -65,7 +66,9 @@ function exec(
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
       cwd: opts.cwd,
-      detached: true, // its own process group, so we can kill descendants
+      // POSIX only: its own process group, so the whole tree can be killed.
+      // On Windows this would open a console instead; `killTree` uses taskkill.
+      detached: DETACHED,
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" },
     });
@@ -89,11 +92,7 @@ function exec(
 
     const timer = setTimeout(() => {
       timedOut = true;
-      try {
-        process.kill(-child.pid!, "SIGKILL");
-      } catch {
-        child.kill("SIGKILL");
-      }
+      killTree(child);
     }, TIMEOUT_MS);
 
     const finish = (code: number | null) => {
@@ -240,7 +239,15 @@ export async function runPractice(
   });
 
   if (lang === "python") {
-    const r = await exec("python3", [abs], { cwd: PRACTICE_LANGS.python.dir, input });
+    const py = await resolvePython();
+    if (!py.cmd) {
+      return {
+        ok: false, stage: "run", stdout: "", stderr: "", exitCode: null,
+        ms: Date.now() - started, timedOut: false, truncated: false,
+        diagnostics: [{ line: null, column: null, message: "No Python 3 found.", hint: PYTHON_HINT }],
+      };
+    }
+    const r = await exec(py.cmd, [...py.prefix, abs], { cwd: PRACTICE_LANGS.python.dir, input });
     return shape("run", r);
   }
 
@@ -278,9 +285,10 @@ export async function toolchainStatus(): Promise<
       return { available: false, version: "" };
     }
   };
-  const [java, python] = await Promise.all([
-    probe("javac", ["-version"]),
-    probe("python3", ["-V"]),
-  ]);
-  return { java, python };
+  const py = await resolvePython();
+  const java = await probe("javac", ["-version"]);
+  return {
+    java,
+    python: { available: Boolean(py.cmd), version: py.version },
+  };
 }
