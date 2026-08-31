@@ -18,11 +18,13 @@
 import * as React from "react";
 import type { PracticeLang } from "@/lib/paths";
 import type { RunResult } from "@/lib/runner";
+import type { Trace } from "@/lib/tracer";
 
 import { Button, Empty, Textarea } from "@/components/ui";
 import { savePracticeCode } from "@/app/actions/practice";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { usePalette } from "@/components/use-palette";
+import { TraceViewer } from "@/components/trace-viewer";
 
 const SAVE_DEBOUNCE_MS = 700;
 
@@ -44,6 +46,8 @@ export interface PracticeEditorProps {
   code: string;
   /** false when the toolchain for this language isn't installed */
   available: boolean;
+  /** false when this JDK can't trace (no jdk.jdi) or the file isn't Java */
+  canTrace?: boolean;
   /** the plain sentence to show when it isn't, e.g. "javac isn't on this machine's PATH…" */
   unavailableNote: string | null;
   /** "javac 21.0.2 · Python 3.12.1" — muted, informational */
@@ -59,6 +63,7 @@ export function PracticeEditor({
   available,
   unavailableNote,
   versions,
+  canTrace,
 }: PracticeEditorProps) {
   const [code, setCode] = React.useState(initialCode);
   const [saveState, setSaveState] = React.useState<SaveState>("clean");
@@ -66,6 +71,11 @@ export function PracticeEditor({
 
   const [showInput, setShowInput] = React.useState(false);
   const [stdin, setStdin] = React.useState("");
+
+  const [tracing, setTracing] = React.useState(false);
+  const [trace, setTrace] = React.useState<Trace | null>(null);
+  const [traceIndex, setTraceIndex] = React.useState(0);
+  const [traceError, setTraceError] = React.useState<string | null>(null);
 
   const [running, setRunning] = React.useState(false);
   const [result, setResult] = React.useState<RunResult | null>(null);
@@ -142,6 +152,48 @@ export function PracticeEditor({
     }
   }, [available, code, file, lang, running, save, showInput, stdin]);
 
+  /* -------------------------------- trace --------------------------------- */
+
+  /**
+   * Trace is a separate press from Run, not a mode of it: it launches a second
+   * JVM and pays a socket round-trip per line, so it is far slower than simply
+   * running the file.
+   */
+  const visualise = React.useCallback(async () => {
+    if (!file || tracing) return;
+    // The tracer compiles the file from disk, so an unsaved buffer would be
+    // traced as whatever was last written.
+    const ok = await save(code);
+    if (!ok) return;
+
+    setTracing(true);
+    setTraceError(null);
+    setTrace(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/practice/trace", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ file }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setTraceError(
+          data.compileError
+            ? `${data.error}\n\n${data.compileError}`
+            : (data.error ?? "The trace failed."),
+        );
+      } else {
+        setTrace(data as Trace);
+        setTraceIndex(0);
+      }
+    } catch {
+      setTraceError("Couldn't reach the tracer.");
+    } finally {
+      setTracing(false);
+    }
+  }, [code, file, save, tracing]);
+
   /* ------------------------------ line jumping ---------------------------- */
 
   /** Jump the caret to a line — how a diagnostic gets you to its cause. */
@@ -193,6 +245,17 @@ export function PracticeEditor({
             >
               Program input
             </Button>
+            {canTrace ? (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => void visualise()}
+                disabled={tracing || running || !available}
+                title="Step through this file line by line"
+              >
+                {tracing ? "Tracing…" : "Visualise"}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="primary"
@@ -216,6 +279,7 @@ export function PracticeEditor({
             value={code}
             language={lang}
             palette={palette}
+            tracedLine={trace ? (trace.steps[traceIndex]?.line ?? null) : null}
             ariaLabel={file ? `${LANG_LABEL[lang]} source of ${file}` : "Code editor"}
             className="h-full"
             onChange={(next) => {
@@ -289,6 +353,23 @@ export function PracticeEditor({
         <p role="alert" className="text-[13px]">
           {runError}
         </p>
+      ) : null}
+
+      {traceError ? (
+        <div className="card px-4 py-3">
+          <p role="alert" className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed">
+            {traceError}
+          </p>
+        </div>
+      ) : null}
+
+      {trace ? (
+        <TraceViewer
+          trace={trace}
+          index={traceIndex}
+          onIndex={setTraceIndex}
+          onClose={() => setTrace(null)}
+        />
       ) : null}
 
       {result ? <RunOutput result={result} onGoToLine={goToLine} /> : null}

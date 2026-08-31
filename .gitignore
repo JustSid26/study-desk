@@ -56,3 +56,6 @@ AGENTS.md
 /practicecode/**
 !/practicecode/README.md
 /data
+
+# tracer build output
+/.tracer-build

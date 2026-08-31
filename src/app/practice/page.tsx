@@ -15,6 +15,7 @@ import { relativeTime } from "@/lib/dates";
 import { isPracticeLang, type PracticeLang } from "@/lib/paths";
 import { listPracticeFiles, readPracticeFile } from "@/lib/practice";
 import { toolchainStatus } from "@/lib/runner";
+import { tracerAvailable } from "@/lib/tracer";
 
 import { FileRail } from "./file-rail";
 
@@ -43,9 +44,10 @@ export default async function PracticePage({
   const requestedLang = one(params.lang);
   const lang: PracticeLang = isPracticeLang(requestedLang) ? requestedLang : "java";
 
-  const [files, toolchain] = await Promise.all([
+  const [files, toolchain, tracer] = await Promise.all([
     listPracticeFiles(lang),
     toolchainStatus(),
+    tracerAvailable(),
   ]);
 
   // A ?file= naming something that no longer exists falls back to the newest
@@ -103,6 +105,7 @@ export default async function PracticePage({
           available={available}
           unavailableNote={unavailableNote}
           versions={versions}
+          canTrace={lang === "java" && tracer.available}
         />
       </div>
     </>

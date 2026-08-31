@@ -18,7 +18,7 @@
  */
 
 import * as React from "react";
-import { EditorState, type Extension, Compartment } from "@codemirror/state";
+import { EditorState, type Extension, Compartment, StateEffect, StateField } from "@codemirror/state";
 import {
   EditorView,
   keymap,
@@ -30,6 +30,8 @@ import {
   rectangularSelection,
   crosshairCursor,
   dropCursor,
+  Decoration,
+  type DecorationSet,
 } from "@codemirror/view";
 import {
   defaultKeymap,
@@ -113,6 +115,12 @@ const baseTheme = EditorView.theme({
   },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 6px 0 12px", minWidth: "34px" },
   ".cm-activeLine": { backgroundColor: "var(--color-surface-2)" },
+  // The traced line has to out-rank .cm-activeLine, which is also a line
+  // decoration and would otherwise win by document order.
+  ".cm-tracedLine, .cm-tracedLine.cm-activeLine": {
+    backgroundColor: "var(--color-accent-soft)",
+    boxShadow: "inset 2px 0 0 0 var(--color-accent)",
+  },
   ".cm-activeLineGutter": {
     backgroundColor: "var(--color-surface-2)",
     color: "var(--color-ink-2)",
@@ -135,6 +143,33 @@ const baseTheme = EditorView.theme({
     borderRadius: "8px",
     color: "var(--color-ink)",
   },
+});
+
+/* --------------------------- traced-line marker --------------------------- */
+
+/**
+ * The line the trace is currently sitting on. A StateField rather than a class
+ * on the DOM node: CodeMirror recycles line elements as it scrolls, so anything
+ * applied directly to an element is lost the moment it leaves the viewport.
+ */
+const setTracedLine = StateEffect.define<number | null>();
+
+const tracedLineMark = Decoration.line({ class: "cm-tracedLine" });
+
+const tracedLineField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (!e.is(setTracedLine)) continue;
+      const line = e.value;
+      if (line == null || line < 1 || line > tr.state.doc.lines) return Decoration.none;
+      const from = tr.state.doc.line(line).from;
+      return Decoration.set([tracedLineMark.range(from)]);
+    }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
 });
 
 /* ------------------------------- languages -------------------------------- */
@@ -174,6 +209,8 @@ export interface CodeEditorProps {
   className?: string;
   readOnly?: boolean;
   ariaLabel?: string;
+  /** 1-based line to mark as the trace's current position, or null for none */
+  tracedLine?: number | null;
 }
 
 export interface CodeEditorHandle {
@@ -184,7 +221,10 @@ export interface CodeEditorHandle {
 
 export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
   function CodeEditor(
-    { value, onChange, language, palette = "mono", onSave, onRun, className, readOnly, ariaLabel },
+    {
+      value, onChange, language, palette = "mono", onSave, onRun,
+      className, readOnly, ariaLabel, tracedLine = null,
+    },
     ref,
   ) {
     const host = React.useRef<HTMLDivElement>(null);
@@ -283,6 +323,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
             ...foldKeymap,
             ...searchKeymap,
           ]),
+          tracedLineField,
           langComp.of([]),
           paletteComp.of(syntaxHighlighting(palette === "colour" ? COLOUR_STYLE : MONO_STYLE)),
           baseTheme,
@@ -328,6 +369,17 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         cancelled = true;
       };
     }, [language, langComp]);
+
+    React.useEffect(() => {
+      const v = view.current;
+      if (!v) return;
+      v.dispatch({ effects: setTracedLine.of(tracedLine) });
+      if (tracedLine != null && tracedLine >= 1 && tracedLine <= v.state.doc.lines) {
+        v.dispatch({
+          effects: EditorView.scrollIntoView(v.state.doc.line(tracedLine).from, { y: "center" }),
+        });
+      }
+    }, [tracedLine]);
 
     React.useEffect(() => {
       view.current?.dispatch({
