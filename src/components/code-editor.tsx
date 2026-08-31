@@ -374,11 +374,37 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       const v = view.current;
       if (!v) return;
       v.dispatch({ effects: setTracedLine.of(tracedLine) });
-      if (tracedLine != null && tracedLine >= 1 && tracedLine <= v.state.doc.lines) {
-        v.dispatch({
-          effects: EditorView.scrollIntoView(v.state.doc.line(tracedLine).from, { y: "center" }),
-        });
-      }
+      if (tracedLine == null || tracedLine < 1 || tracedLine > v.state.doc.lines) return;
+
+      /**
+       * Follow the traced line by moving the editor's OWN scroller, and only
+       * when the line has actually left the visible area.
+       *
+       * `EditorView.scrollIntoView` cannot be used here: it walks up the DOM
+       * scrolling every ancestor, so on each step it dragged the whole window
+       * back to the editor and made it impossible to sit below and watch the
+       * variables. Scrolling `scrollDOM` directly touches nothing outside it.
+       *
+       * Reading layout inside `requestMeasure` keeps the read and the write in
+       * CodeMirror's own measure cycle instead of forcing a synchronous reflow
+       * on every step.
+       */
+      v.requestMeasure({
+        read: () => {
+          const block = v.lineBlockAt(v.state.doc.line(tracedLine).from);
+          const scroller = v.scrollDOM;
+          const top = scroller.scrollTop;
+          const bottom = top + scroller.clientHeight;
+          // A margin of two lines, so following a loop does not re-scroll every
+          // time the line lands one row from an edge.
+          const margin = block.height * 2;
+          if (block.top >= top + margin && block.bottom <= bottom - margin) return null;
+          return block.top - scroller.clientHeight / 2 + block.height / 2;
+        },
+        write: (target: number | null) => {
+          if (target != null) v.scrollDOM.scrollTop = Math.max(0, target);
+        },
+      });
     }, [tracedLine]);
 
     React.useEffect(() => {

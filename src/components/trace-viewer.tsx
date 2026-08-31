@@ -190,22 +190,26 @@ export function TraceViewer({ trace, index, onIndex, onClose }: TraceViewerProps
           />
         </label>
 
-        <span className="font-mono text-[11.5px] tabular-nums text-ink-2">
-          {index + 1} / {total} · line {step?.line ?? "—"}
+        <span className="shrink-0 whitespace-nowrap font-mono text-[11.5px] tabular-nums text-ink-2">
+          {String(index + 1).padStart(String(total).length, "0")} / {total} · line{" "}
+          {step?.line ?? "—"}
         </span>
         <Button size="sm" variant="ghost" onClick={onClose}>Close</Button>
       </div>
 
       {trace.notice ? (
-        <p role="alert" className="mx-4 my-2 text-[12px] leading-snug">
+        <p role="alert" className="mx-4 my-2 shrink-0 text-[12px] leading-snug">
           {trace.notice}
         </p>
       ) : null}
 
-      {/* -------------------------------- panes ------------------------------ */}
-      <div className="grid min-w-0 gap-px bg-line-soft md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      {/* -------------------------------- panes ------------------------------
+          Both panes are a fixed height and scroll internally. Left to size
+          themselves, the variables list grows and shrinks with whatever is in
+          scope, and the page reflows under the pointer on every single step. */}
+      <div className="grid min-w-0 gap-px bg-line-soft md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:grid-cols-1">
         {/* variables, innermost frame first */}
-        <div className="min-w-0 bg-surface px-4 py-3">
+        <div className="min-w-0 overflow-y-auto bg-surface px-4 py-3 [height:26vh] [min-height:200px] xl:[height:30vh]">
           <h3 className="lbl mb-2">Variables</h3>
           {step && step.frames.length ? (
             <div className="flex flex-col gap-3">
@@ -241,7 +245,7 @@ export function TraceViewer({ trace, index, onIndex, onClose }: TraceViewerProps
         </div>
 
         {/* call stack + output so far */}
-        <div className="flex min-w-0 flex-col gap-3 bg-surface px-4 py-3">
+        <div className="flex min-w-0 flex-col gap-3 overflow-y-auto bg-surface px-4 py-3 [height:26vh] [min-height:200px] xl:[height:22vh]">
           <div>
             <h3 className="lbl mb-1.5">Call stack</h3>
             <ol className="flex flex-col gap-0.5">

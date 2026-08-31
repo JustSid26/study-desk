@@ -35,7 +35,7 @@ const SAVE_DEBOUNCE_MS = 700;
  * would sit still while the code scrolled — beside a column of empty space as
  * tall as the file.
  */
-const PANE_HEIGHT = "h-[46vh] min-h-[300px]";
+export const PANE_HEIGHT = "h-[46vh] min-h-[300px]";
 
 type SaveState = "clean" | "dirty" | "saving" | "saved" | "error";
 
@@ -228,6 +228,15 @@ export function PracticeEditor({
         </p>
       ) : null}
 
+      {/* While a trace is open the code and the trace sit side by side on a wide
+          screen, so stepping never means scrolling between them. */}
+      <div
+        className={
+          trace
+            ? "grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            : "min-w-0"
+        }
+      >
       <section className="card flex min-w-0 flex-col overflow-hidden">
         {/* ------------------------------ toolbar ---------------------------- */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line-soft px-4 py-3">
@@ -349,6 +358,16 @@ export function PracticeEditor({
         </p>
       ) : null}
 
+      {trace ? (
+        <TraceViewer
+          trace={trace}
+          index={traceIndex}
+          onIndex={setTraceIndex}
+          onClose={() => setTrace(null)}
+        />
+      ) : null}
+      </div>
+
       {runError ? (
         <p role="alert" className="text-[13px]">
           {runError}
@@ -361,15 +380,6 @@ export function PracticeEditor({
             {traceError}
           </p>
         </div>
-      ) : null}
-
-      {trace ? (
-        <TraceViewer
-          trace={trace}
-          index={traceIndex}
-          onIndex={setTraceIndex}
-          onClose={() => setTrace(null)}
-        />
       ) : null}
 
       {result ? <RunOutput result={result} onGoToLine={goToLine} /> : null}
