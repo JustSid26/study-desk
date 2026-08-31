@@ -12,7 +12,7 @@ import { getDashboard } from "@/lib/queries";
 import { recentFiles, type NoteKind } from "@/lib/vault";
 import { addDays, dayRange, formatFullDay, relativeTime, today } from "@/lib/dates";
 import { Heatmap, HeatmapKey } from "@/components/heatmap";
-import { DIFFICULTY_COLOR, DifficultyChip } from "@/app/leetcode/bits";
+import { DIFFICULTY_COLOR, DifficultyChip } from "@/app/(app)/leetcode/bits";
 import {
   BarRow,
   Card,

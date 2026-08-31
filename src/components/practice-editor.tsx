@@ -35,8 +35,6 @@ const SAVE_DEBOUNCE_MS = 700;
  * would sit still while the code scrolled — beside a column of empty space as
  * tall as the file.
  */
-export const PANE_HEIGHT = "h-[46vh] min-h-[300px]";
-
 type SaveState = "clean" | "dirty" | "saving" | "saved" | "error";
 
 export interface PracticeEditorProps {
@@ -208,7 +206,7 @@ export function PracticeEditor({
 
   if (!file) {
     return (
-      <section className="card">
+      <section className="flex min-h-0 items-center justify-center bg-surface">
         <Empty title="No file open">
           Practice files are real files on disk, under{" "}
           <code className="rounded bg-surface-2 px-1 py-px font-mono text-[11.5px] text-ink">
@@ -221,24 +219,12 @@ export function PracticeEditor({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      {unavailableNote ? (
-        <p role="alert" className="text-[13px] leading-relaxed">
-          {unavailableNote}
-        </p>
-      ) : null}
-
-      {/* Code left, results right — 60/40 — so stepping through a trace or
-          reading output never means scrolling away from the code. The split
-          only appears once there is something to show on the right. */}
-      <div
-        className={
-          trace || result
-            ? "grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
-            : "min-w-0"
-        }
-      >
-      <section className="card flex min-w-0 flex-col overflow-hidden">
+    /* Code left, results right, 60/40, both full height. The results pane is
+       always present rather than appearing on the first run: a panel that
+       materialises and shoves the editor sideways is worse than an empty one
+       that explains what will land in it. */
+    <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:grid-rows-1">
+      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-line lg:border-r">
         {/* ------------------------------ toolbar ---------------------------- */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line-soft px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -283,7 +269,7 @@ export function PracticeEditor({
         </div>
 
         {/* ------------------------------ editor ----------------------------- */}
-        <div className={`${PANE_HEIGHT} min-w-0 overflow-hidden bg-surface`}>
+        <div className="min-h-0 flex-1 overflow-hidden bg-surface">
           <CodeEditor
             ref={editorRef}
             value={code}
@@ -353,23 +339,60 @@ export function PracticeEditor({
         </p>
       </section>
 
-      {saveError ? (
-        <p role="alert" className="text-[12.5px]">
-          {saveError}
-        </p>
-      ) : null}
+      {/* ------------------------------- results ---------------------------- */}
+      <section
+        aria-label="Output"
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden border-t border-line bg-surface lg:border-t-0"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line-soft px-4 py-2.5">
+          <h2 className="lbl">{trace ? "Visualisation" : "Output"}</h2>
+          {trace ? (
+            <Button size="sm" variant="ghost" onClick={() => setTrace(null)}>
+              Close
+            </Button>
+          ) : null}
+        </div>
 
-      {trace ? (
-        <TraceViewer
-          trace={trace}
-          index={traceIndex}
-          onIndex={setTraceIndex}
-          onClose={() => setTrace(null)}
-        />
-      ) : result ? (
-        <RunOutput result={result} onGoToLine={goToLine} />
-      ) : null}
-      </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {unavailableNote ? (
+            <p role="alert" className="m-4 text-[12.5px] leading-relaxed">
+              {unavailableNote}
+            </p>
+          ) : null}
+          {saveError ? (
+            <p role="alert" className="m-4 text-[12.5px]">
+              {saveError}
+            </p>
+          ) : null}
+          {runError ? (
+            <p role="alert" className="m-4 text-[12.5px]">
+              {runError}
+            </p>
+          ) : null}
+          {traceError ? (
+            <p role="alert" className="m-4 whitespace-pre-wrap font-mono text-[12px] leading-relaxed">
+              {traceError}
+            </p>
+          ) : null}
+
+          {trace ? (
+            <TraceViewer
+              trace={trace}
+              index={traceIndex}
+              onIndex={setTraceIndex}
+              onClose={() => setTrace(null)}
+            />
+          ) : result ? (
+            <RunOutput result={result} onGoToLine={goToLine} />
+          ) : !unavailableNote && !runError && !traceError && !saveError ? (
+            <p className="px-4 py-3 text-[12.5px] leading-relaxed text-ink-3">
+              Press Run to execute this file. Anything it prints lands here, along with
+              the exit code and how long it took.
+              {canTrace ? " Visualise steps through it line by line instead." : ""}
+            </p>
+          ) : null}
+        </div>
+      </section>
 
       {runError ? (
         <p role="alert" className="text-[13px]">
@@ -425,9 +448,9 @@ function RunOutput({
   const stderr = result.stderr.trim();
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col">
       {result.diagnostics.length > 0 ? (
-        <section className="card">
+        <section className="border-b border-line">
           <div className="border-b border-line-soft px-4 py-2.5">
             <h3 className="lbl">
               {compile ? "What the compiler objected to" : "What went wrong"}
@@ -458,9 +481,12 @@ function RunOutput({
         </section>
       ) : null}
 
-      <section className="card min-w-0">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line-soft px-4 py-2.5">
-          <h3 className="lbl">{compile ? "Compile error" : "Output"}</h3>
+      <section className="min-w-0">
+        {/* No "Output" heading here — the results pane above already carries
+            one, and two in a row read as a bug. Only the compile case renames
+            itself, because that is genuinely different from program output. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line-soft px-4 py-2">
+          <h3 className="lbl">{compile ? "Compile error" : ""}</h3>
           <div className="flex items-center gap-3 font-mono text-[11.5px] tabular-nums text-ink-3">
             <span>exit {result.exitCode ?? "—"}</span>
             <span>{result.ms} ms</span>
@@ -477,7 +503,7 @@ function RunOutput({
           ) : null}
 
           {result.stdout.trim() ? (
-            <pre className="max-h-[40vh] overflow-auto whitespace-pre font-mono text-[12.5px] leading-[1.55] text-ink">
+            <pre className="overflow-x-auto whitespace-pre font-mono text-[12.5px] leading-[1.55] text-ink">
               {result.stdout}
             </pre>
           ) : (

@@ -56,9 +56,9 @@ export default function RootLayout({
       >
         <div className="app-shell grid min-h-screen">
           <Nav />
-          <main className="min-w-0 px-5 pb-28 pt-6 md:px-10 md:pb-16 md:pt-9">
-            <div className="mx-auto flex max-w-[1120px] flex-col gap-6">{children}</div>
-          </main>
+          {/* Bare on purpose. The padded, centred column lives in the (app)
+              route group's layout, so Practice can fill the window instead. */}
+          <main className="min-w-0">{children}</main>
         </div>
       </body>
     </html>

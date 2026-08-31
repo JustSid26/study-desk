@@ -156,7 +156,7 @@ export function TraceViewer({ trace, index, onIndex, onClose }: TraceViewerProps
   const printed = step ? trace.stdout.slice(0, step.out) : "";
 
   return (
-    <section className="card flex min-w-0 flex-col" aria-label="Execution trace">
+    <section className="flex min-w-0 flex-col" aria-label="Execution trace">
       {/* ------------------------------ controls ----------------------------- */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft px-4 py-2.5">
         <div className="flex items-center gap-1">
@@ -207,9 +207,9 @@ export function TraceViewer({ trace, index, onIndex, onClose }: TraceViewerProps
           Both panes are a fixed height and scroll internally. Left to size
           themselves, the variables list grows and shrinks with whatever is in
           scope, and the page reflows under the pointer on every single step. */}
-      <div className="grid min-w-0 gap-px bg-line-soft md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:grid-cols-1">
+      <div className="grid min-w-0 gap-px bg-line-soft">
         {/* variables, innermost frame first */}
-        <div className="min-w-0 overflow-y-auto bg-surface px-4 py-3 [height:26vh] [min-height:200px] xl:[height:30vh]">
+        <div className="min-w-0 overflow-y-auto bg-surface px-4 py-3 [height:38vh] [min-height:220px]">
           <h3 className="lbl mb-2">Variables</h3>
           {step && step.frames.length ? (
             <div className="flex flex-col gap-3">
@@ -245,7 +245,7 @@ export function TraceViewer({ trace, index, onIndex, onClose }: TraceViewerProps
         </div>
 
         {/* call stack + output so far */}
-        <div className="flex min-w-0 flex-col gap-3 overflow-y-auto bg-surface px-4 py-3 [height:26vh] [min-height:200px] xl:[height:22vh]">
+        <div className="flex min-w-0 flex-col gap-3 overflow-y-auto bg-surface px-4 py-3 [height:28vh] [min-height:180px]">
           <div>
             <h3 className="lbl mb-1.5">Call stack</h3>
             <ol className="flex flex-col gap-0.5">

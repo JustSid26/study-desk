@@ -164,17 +164,17 @@ export function FileRail({
   }
 
   return (
-    <div className="flex min-w-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       {/* ------------------------------ explorer ---------------------------- */}
-      <section className="card min-w-0 overflow-hidden">
-        <div className="flex items-center justify-between gap-2 border-b border-line-soft px-2.5 py-2">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line-soft px-2.5 py-2">
           <h2 className="lbl truncate">Explorer</h2>
           <Button size="sm" variant="ghost" onClick={openCreate} title="New file">
             New file
           </Button>
         </div>
 
-        <div className="max-h-[52vh] min-w-0 overflow-y-auto py-1" role="tree" aria-label="Practice files">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto py-1" role="tree" aria-label="Practice files">
           {LANGS.map(({ id, label }) => {
             const own = byLang[id];
             const open = expanded[id];
@@ -255,7 +255,7 @@ export function FileRail({
           })}
         </div>
 
-        <p className="border-t border-line-soft px-2.5 py-2 text-[11px] leading-snug text-ink-3">
+        <p className="shrink-0 border-t border-line-soft px-2.5 py-2 text-[11px] leading-snug text-ink-3">
           Real files under{" "}
           <code className="rounded bg-surface-2 px-1 py-px font-mono text-[10.5px] text-ink">
             practicecode/

@@ -9,7 +9,6 @@
  */
 import type { Metadata } from "next";
 
-import { PageHeader } from "@/components/ui";
 import { PracticeEditor } from "@/components/practice-editor";
 import { relativeTime } from "@/lib/dates";
 import { isPracticeLang, type PracticeLang } from "@/lib/paths";
@@ -75,30 +74,29 @@ export default async function PracticePage({
     .join(" · ");
 
   return (
-    <>
-      <PageHeader
-        title="Practice"
-        sub={
-          <>
-            Scratch code you can actually run. Files live at{" "}
-            <code className="rounded bg-surface-2 px-1 py-px font-mono text-[11.5px] text-ink">
-              practicecode/
-            </code>{" "}
-            in the project, so the same file opens in your editor.
-          </>
-        }
-      />
+    /**
+     * Practice fills the window rather than sitting in the reading column: it
+     * is an editor, and an editor that only gets 1120px with a page heading
+     * above it wastes most of the screen. `100dvh` rather than `100vh` so the
+     * mobile browser's collapsing toolbar does not crop the bottom off.
+     */
+    <div className="flex h-[100dvh] min-w-0 flex-col overflow-hidden pb-[57px] md:pb-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[212px_minmax(0,1fr)] md:grid-rows-1">
+        {/* Explorer. On a phone it becomes a short scrollable strip above the
+            editor rather than disappearing — hidden, there is no way to open a
+            different file at all. */}
+        <div className="max-h-[30vh] min-h-0 border-b border-line bg-surface md:max-h-none md:border-b-0 md:border-r">
+          <FileRail
+            lang={lang}
+            selected={selected}
+            filesByLang={{
+              java: javaFiles.map((f) => ({ name: f.name, modifiedText: relativeTime(f.modified) })),
+              python: pythonFiles.map((f) => ({ name: f.name, modifiedText: relativeTime(f.modified) })),
+            }}
+          />
+        </div>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
-        <FileRail
-          lang={lang}
-          selected={selected}
-          filesByLang={{
-            java: javaFiles.map((f) => ({ name: f.name, modifiedText: relativeTime(f.modified) })),
-            python: pythonFiles.map((f) => ({ name: f.name, modifiedText: relativeTime(f.modified) })),
-          }}
-        />
-
+        {/* editor + results */}
         <PracticeEditor
           // Remount on a file change so the buffer, the run output and the
           // save state all belong to the file actually on screen.
@@ -112,6 +110,6 @@ export default async function PracticePage({
           canTrace={lang === "java" && tracer.available}
         />
       </div>
-    </>
+    </div>
   );
 }
