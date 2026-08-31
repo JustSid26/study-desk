@@ -128,7 +128,8 @@ export function NavLinks({ variant = "rail" }: { variant?: "rail" | "bar" }) {
             <Link
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-[13px] font-medium transition-colors ${
+              title={label}
+              className={`nav-link flex items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-[13px] font-medium transition-colors ${
                 active
                   ? "bg-accent-soft text-accent"
                   : "text-ink-2 hover:bg-surface-2 hover:text-ink"
@@ -137,7 +138,7 @@ export function NavLinks({ variant = "rail" }: { variant?: "rail" | "bar" }) {
               <span className="shrink-0">
                 <Icon />
               </span>
-              <span className="truncate">{label}</span>
+              <span className="nav-label truncate">{label}</span>
             </Link>
           </li>
         );

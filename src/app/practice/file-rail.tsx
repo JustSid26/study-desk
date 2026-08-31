@@ -1,10 +1,16 @@
 "use client";
 
 /**
- * The left rail: which language, which file, and the three things you do to a
- * file. It is a Client Component only because creating, renaming and deleting
- * each need a `<dialog>` and a pending state — the rows themselves stay real
- * links, so middle-click, the status bar and the back button all still work.
+ * The explorer: both language folders and every file in them, laid out the way
+ * an editor's file tree is — a chevron per folder, an indent guide down the
+ * children, one compact row per file, and the row actions revealed on hover.
+ *
+ * Showing both folders at once replaces the old language toggle: picking a file
+ * is picking its language, which is one decision rather than two.
+ *
+ * It is a Client Component only because creating, renaming and deleting each
+ * need a `<dialog>` and a pending state — the rows themselves stay real links,
+ * so middle-click, the status bar and the back button all still work.
  *
  * Modified times arrive pre-formatted from the server. Calling `relativeTime`
  * here instead would render "2m ago" on the server and "3m ago" on the client
@@ -26,24 +32,60 @@ export interface RailFile {
 }
 
 const LANGS: Array<{ id: RailLang; label: string }> = [
-  { id: "java", label: "Java" },
-  { id: "python", label: "Python" },
+  { id: "java", label: "java" },
+  { id: "python", label: "python" },
 ];
+
+/** Chevron; rotated by CSS so the open and closed states cannot disagree. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"
+      fill="none" stroke="currentColor" strokeWidth="2.4"
+      strokeLinecap="round" strokeLinejoin="round"
+      className={`shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+    >
+      <path d="m9 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function FileGlyph({ lang }: { lang: RailLang }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="shrink-0 font-mono text-[9px] font-semibold leading-none tracking-tight text-ink-3"
+    >
+      {lang === "java" ? "J" : "PY"}
+    </span>
+  );
+}
 
 const href = (lang: RailLang, file?: string) =>
   file ? `/practice?lang=${lang}&file=${encodeURIComponent(file)}` : `/practice?lang=${lang}`;
 
 export function FileRail({
   lang,
-  files,
+  filesByLang,
   selected,
 }: {
+  /** the language of the open file, so its folder starts expanded */
   lang: RailLang;
-  files: RailFile[];
+  filesByLang: Record<RailLang, RailFile[]>;
   selected: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
+
+  const byLang = filesByLang;
+
+  // The open file's folder starts expanded; the other opens if it has anything
+  // in it, so a new user sees both rather than one collapsed mystery.
+  const [expanded, setExpanded] = React.useState<Record<RailLang, boolean>>(() => ({
+    java: lang === "java" || byLang.java.length > 0,
+    python: lang === "python" || byLang.python.length > 0,
+  }));
+  const toggle = (id: RailLang) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
   const createRef = React.useRef<HTMLDialogElement>(null);
   const renameRef = React.useRef<HTMLDialogElement>(null);
@@ -122,119 +164,105 @@ export function FileRail({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      {/* ---------------------------- language ---------------------------- */}
-      <div
-        role="group"
-        aria-label="Language"
-        className="grid grid-cols-2 gap-1 rounded-[9px] border border-line bg-surface-2 p-1"
-      >
-        {LANGS.map(({ id, label }) => {
-          const current = id === lang;
-          return (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={current}
-              onClick={() => startTransition(() => router.push(href(id)))}
-              className={`h-8 cursor-pointer rounded-[6px] text-[12.5px] font-medium transition-colors ${
-                current
-                  ? "bg-surface text-ink shadow-[var(--shadow-card)]"
-                  : "text-ink-3 hover:text-ink"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ------------------------------ files ----------------------------- */}
+    <div className="flex min-w-0 flex-col">
+      {/* ------------------------------ explorer ---------------------------- */}
       <section className="card min-w-0 overflow-hidden">
-        <div className="flex items-center justify-between gap-2 border-b border-line-soft px-3 py-2.5">
-          <h2 className="lbl">Files</h2>
-          <Button size="sm" onClick={openCreate}>
+        <div className="flex items-center justify-between gap-2 border-b border-line-soft px-2.5 py-2">
+          <h2 className="lbl truncate">Explorer</h2>
+          <Button size="sm" variant="ghost" onClick={openCreate} title="New file">
             New file
           </Button>
         </div>
 
-        {files.length === 0 ? (
-          <Empty
-            title="Nothing here yet"
-            action={
-              <Button size="sm" variant="primary" onClick={openCreate}>
-                New file
-              </Button>
-            }
-          >
-            These are real files on disk under{" "}
-            <code className="rounded bg-surface-2 px-1 py-px font-mono text-[11px] text-ink">
-              practicecode/{lang}/
-            </code>
-            , so anything you make here also opens in your editor.
-          </Empty>
-        ) : (
-          <ul className="divide-y divide-line-soft">
-            {files.map((f) => {
-              const current = f.name === selected;
-              return (
-                <li
-                  key={f.name}
-                  className={`group flex items-center gap-1 pr-1.5 ${
-                    current ? "bg-accent-soft" : ""
-                  }`}
+        <div className="max-h-[52vh] min-w-0 overflow-y-auto py-1" role="tree" aria-label="Practice files">
+          {LANGS.map(({ id, label }) => {
+            const own = byLang[id];
+            const open = expanded[id];
+            return (
+              <div key={id} role="treeitem" aria-expanded={open} aria-selected={false}>
+                <button
+                  type="button"
+                  onClick={() => toggle(id)}
+                  className="flex w-full cursor-pointer items-center gap-1 px-2 py-[3px] text-left text-[12.5px] text-ink-2 hover:bg-surface-2 hover:text-ink"
                 >
-                  <Link
-                    href={href(lang, f.name)}
-                    aria-current={current ? "page" : undefined}
-                    className="min-w-0 flex-1 px-3 py-2.5 no-underline"
-                  >
-                    <span
-                      className={`block truncate font-mono text-[12.5px] ${
-                        current ? "font-medium text-ink" : "text-ink-2"
-                      }`}
-                    >
-                      {f.name}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] text-ink-3">
-                      {f.modifiedText}
-                    </span>
-                  </Link>
+                  <Chevron open={open} />
+                  <span className="truncate font-medium">{label}</span>
+                  <span className="ml-auto shrink-0 pl-1 font-mono text-[10.5px] tabular-nums text-ink-3">
+                    {own.length}
+                  </span>
+                </button>
 
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <IconButton label={`Rename ${f.name}`} onClick={() => openRename(f.name)}>
-                      <svg {...ICON} aria-hidden="true">
-                        <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z" />
-                        <path d="M14.5 6.5 17.5 9.5" />
-                      </svg>
-                    </IconButton>
-                    <IconButton label={`Delete ${f.name}`} onClick={() => openDelete(f.name)}>
-                      <svg {...ICON} aria-hidden="true">
-                        <path d="M5 7h14" />
-                        <path d="M9 7V5h6v2" />
-                        <path d="M7 7v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7" />
-                      </svg>
-                    </IconButton>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                {open ? (
+                  own.length === 0 ? (
+                    <p className="py-1 pl-[26px] pr-2 text-[11.5px] text-ink-3">No files yet</p>
+                  ) : (
+                    <ul role="group" className="relative">
+                      {/* The indent guide, drawn once behind the children rather
+                          than as a border on each row, so it is unbroken. */}
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute bottom-0 left-[13px] top-0 w-px bg-line"
+                      />
+                      {own.map((f) => {
+                        const current = id === lang && f.name === selected;
+                        return (
+                          <li key={f.name} role="none" className="group/row relative">
+                            <Link
+                              href={href(id, f.name)}
+                              role="treeitem"
+                              aria-selected={current}
+                              aria-current={current ? "page" : undefined}
+                              title={`${f.name} — ${f.modifiedText}`}
+                              className={`flex min-w-0 items-center gap-1.5 py-[3px] pl-[26px] pr-14 no-underline ${
+                                current
+                                  ? "bg-accent-soft text-ink"
+                                  : "text-ink-2 hover:bg-surface-2 hover:text-ink"
+                              }`}
+                            >
+                              <FileGlyph lang={id} />
+                              <span className="truncate font-mono text-[12px]">{f.name}</span>
+                            </Link>
 
-      {note ? (
-        <p className="text-[11.5px] leading-snug text-ink-3">
-          {note}{" "}
-          <button
-            type="button"
-            onClick={() => setNote(null)}
-            className="cursor-pointer underline underline-offset-2"
-          >
-            Dismiss
-          </button>
+                            {/* Actions sit over the row. They appear on hover and
+                                on keyboard focus, so they are reachable without a
+                                pointer — `group-focus-within` covers tabbing in. */}
+                            <span className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+                              <IconButton
+                                label={`Rename ${f.name}`}
+                                onClick={() => openRename(f.name)}
+                              >
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m14 5 4 4" />
+                                </svg>
+                              </IconButton>
+                              <IconButton
+                                label={`Delete ${f.name}`}
+                                onClick={() => openDelete(f.name)}
+                              >
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M4 7h16" /><path d="M9 7V5h6v2" /><path d="m6 7 1 13h10l1-13" />
+                                </svg>
+                              </IconButton>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="border-t border-line-soft px-2.5 py-2 text-[11px] leading-snug text-ink-3">
+          Real files under{" "}
+          <code className="rounded bg-surface-2 px-1 py-px font-mono text-[10.5px] text-ink">
+            practicecode/
+          </code>
+          , so they open in your editor too.
         </p>
-      ) : null}
+      </section>
 
       {/* ----------------------------- dialogs ---------------------------- */}
       <dialog
@@ -373,7 +401,7 @@ function IconButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+      className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-ink-3 transition-colors hover:bg-surface-3 hover:text-ink"
     >
       {children}
     </button>

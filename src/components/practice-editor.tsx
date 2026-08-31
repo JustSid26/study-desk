@@ -228,12 +228,13 @@ export function PracticeEditor({
         </p>
       ) : null}
 
-      {/* While a trace is open the code and the trace sit side by side on a wide
-          screen, so stepping never means scrolling between them. */}
+      {/* Code left, results right — 60/40 — so stepping through a trace or
+          reading output never means scrolling away from the code. The split
+          only appears once there is something to show on the right. */}
       <div
         className={
-          trace
-            ? "grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+          trace || result
+            ? "grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
             : "min-w-0"
         }
       >
@@ -365,6 +366,8 @@ export function PracticeEditor({
           onIndex={setTraceIndex}
           onClose={() => setTrace(null)}
         />
+      ) : result ? (
+        <RunOutput result={result} onGoToLine={goToLine} />
       ) : null}
       </div>
 
@@ -382,7 +385,6 @@ export function PracticeEditor({
         </div>
       ) : null}
 
-      {result ? <RunOutput result={result} onGoToLine={goToLine} /> : null}
     </div>
   );
 }

@@ -36,10 +36,25 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
+      <head>
+        {/*
+          Size the rail before first paint. Without this the server renders an
+          open rail, the client reads localStorage a frame later, and a
+          collapsed rail visibly snaps shut on every navigation.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var r=localStorage.getItem('study-tracker.rail');" +
+              "document.documentElement.setAttribute('data-rail',r==='collapsed'?'collapsed':'open')}" +
+              "catch(e){document.documentElement.setAttribute('data-rail','open')}",
+          }}
+        />
+      </head>
       <body
         className={`${instrument.variable} ${jetbrains.variable} ${newsreader.variable} antialiased`}
       >
-        <div className="grid min-h-screen grid-cols-1 md:grid-cols-[236px_minmax(0,1fr)]">
+        <div className="app-shell grid min-h-screen">
           <Nav />
           <main className="min-w-0 px-5 pb-28 pt-6 md:px-10 md:pb-16 md:pt-9">
             <div className="mx-auto flex max-w-[1120px] flex-col gap-6">{children}</div>

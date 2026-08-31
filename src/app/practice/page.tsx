@@ -44,11 +44,15 @@ export default async function PracticePage({
   const requestedLang = one(params.lang);
   const lang: PracticeLang = isPracticeLang(requestedLang) ? requestedLang : "java";
 
-  const [files, toolchain, tracer] = await Promise.all([
-    listPracticeFiles(lang),
+  // Both folders, because the explorer shows the whole tree rather than only
+  // the selected language.
+  const [javaFiles, pythonFiles, toolchain, tracer] = await Promise.all([
+    listPracticeFiles("java"),
+    listPracticeFiles("python"),
     toolchainStatus(),
     tracerAvailable(),
   ]);
+  const files = lang === "java" ? javaFiles : pythonFiles;
 
   // A ?file= naming something that no longer exists falls back to the newest
   // file rather than showing an empty editor over a full list.
@@ -85,14 +89,14 @@ export default async function PracticePage({
         }
       />
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[210px_minmax(0,1fr)]">
         <FileRail
           lang={lang}
           selected={selected}
-          files={files.map((f) => ({
-            name: f.name,
-            modifiedText: relativeTime(f.modified),
-          }))}
+          filesByLang={{
+            java: javaFiles.map((f) => ({ name: f.name, modifiedText: relativeTime(f.modified) })),
+            python: pythonFiles.map((f) => ({ name: f.name, modifiedText: relativeTime(f.modified) })),
+          }}
         />
 
         <PracticeEditor

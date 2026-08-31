@@ -277,6 +277,42 @@
 }
 
 @layer components {
+  /* ------------------------------ the rail --------------------------------
+     The collapse state lives on <html data-rail> so the CSS resizes the shell
+     grid and the root layout can stay a Server Component. `layout.tsx` stamps
+     the attribute before first paint, so a collapsed rail never flashes open. */
+  /* `.app-shell` owns the columns outright. It must NOT be paired with a
+     `grid-cols-*` utility: utilities sit in a later cascade layer than
+     components, so the utility would win and the rail would stretch to the
+     full viewport width. */
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 768px) {
+    .app-shell {
+      grid-template-columns: 236px minmax(0, 1fr);
+      transition: grid-template-columns 160ms ease;
+    }
+    :root[data-rail="collapsed"] .app-shell {
+      grid-template-columns: 60px minmax(0, 1fr);
+    }
+    /* Icons centre themselves and the labels go, but the links stay links —
+       the accessible name survives in the title and the visually hidden span. */
+    :root[data-rail="collapsed"] [data-rail-aside] .nav-label {
+      display: none;
+    }
+    :root[data-rail="collapsed"] [data-rail-aside] .nav-link {
+      justify-content: center;
+      padding-inline: 0;
+    }
+    :root[data-rail="collapsed"] [data-rail-aside] .rail-foot {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-shell { transition: none; }
+  }
+
   /* Uppercase mono eyebrow — every field label and card kicker. */
   .lbl {
     font-family: var(--font-mono);

@@ -6,6 +6,7 @@
  * < md: a fixed bottom bar. The layout leaves bottom padding for it.
  */
 import { NavLinks } from "@/components/nav-links";
+import { RailToggle } from "@/components/rail-toggle";
 
 export function Nav({
   footer,
@@ -19,18 +20,22 @@ export function Nav({
 
   return (
     <>
-      <aside className="glass sticky top-0 hidden h-screen flex-col border-r md:flex">
-        <div className="px-4 pb-3 pt-5">
-          <span className="text-[15px] font-bold tracking-[-0.02em] text-ink">
+      <aside
+        data-rail-aside
+        className="glass sticky top-0 hidden h-screen flex-col border-r md:flex"
+      >
+        <div className="flex items-center justify-between gap-2 py-4 pl-4 pr-2.5">
+          <span className="truncate text-[15px] font-bold tracking-[-0.02em] text-ink [[data-rail=collapsed]_&]:hidden">
             Study Tracker
           </span>
+          <RailToggle />
         </div>
 
         <nav aria-label="Main" className="min-h-0 flex-1 overflow-y-auto py-1">
           <NavLinks />
         </nav>
 
-        {slot ? <div className="border-t border-line-soft px-3 py-3">{slot}</div> : null}
+        {slot ? <div className="rail-foot border-t border-line-soft px-3 py-3">{slot}</div> : null}
       </aside>
 
       <nav
